@@ -128,3 +128,8 @@
     @apply font-sans;
   }
 }
+
+/* A2UI / Radix Select：下拉通过 Portal 挂到 body，提高层级避免被聊天层叠上下文压住 */
+[data-slot="select-content"] {
+  z-index: 300;
+}

@@ -1,17 +1,19 @@
 "use client";
 
-import { Menu, PanelLeft, PanelLeftClose, User } from "lucide-react";
+import { Menu, PanelLeft, PanelLeftClose, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useUIStore } from "@/stores/ui";
+import { SettingsDialog } from "@/components/settings/SettingsDialog";
 
 export function TopBar() {
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggleSidebarCollapsed = useUIStore((s) => s.toggleSidebarCollapsed);
+  const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-gray-100 bg-white/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-white/80 md:h-16 md:px-5">
+    <>
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:h-16 md:px-5">
       <div className="flex min-w-0 items-center gap-2 md:gap-3">
         <Button
           variant="ghost"
@@ -30,19 +32,26 @@ export function TopBar() {
           aria-label={sidebarCollapsed ? "展开侧栏" : "折叠侧栏"}
         >
           {sidebarCollapsed ? (
-            <PanelLeft className="h-5 w-5 text-gray-700" />
+            <PanelLeft className="h-5 w-5 text-foreground" />
           ) : (
-            <PanelLeftClose className="h-5 w-5 text-gray-700" />
+            <PanelLeftClose className="h-5 w-5 text-foreground" />
           )}
         </Button>
         <span className="text-xl" role="img" aria-label="cat">🐱</span>
-        <span className="text-lg font-semibold tracking-tight text-gray-900 md:text-xl">MeowOne</span>
+        <span className="text-lg font-semibold tracking-tight text-foreground md:text-xl">MeowOne</span>
       </div>
-      <Avatar className="h-8 w-8">
-        <AvatarFallback>
-          <User className="h-4 w-4" />
-        </AvatarFallback>
-      </Avatar>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-9 w-9"
+        onClick={() => setSettingsOpen(true)}
+        aria-label="设置"
+      >
+        <Settings className="h-5 w-5 text-foreground" />
+      </Button>
     </header>
+    <SettingsDialog />
+    </>
   );
 }

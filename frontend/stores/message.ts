@@ -49,6 +49,14 @@ interface MessageState {
   settleToolResult: (toolCallId: string, ok: boolean) => void;
   /** Clear streaming state before a new chat request (avoids stale ids from the previous turn). */
   resetStreaming: () => void;
+  /** Current SSE request (chat / card / A2UI); abort to stop streaming. */
+  activeStreamController: AbortController | null;
+  /** Register the controller for the in-flight SSE (call after detaching any previous stream). */
+  startStream: (controller: AbortController) => void;
+  /** Abort the previous SSE without clearing messages (call before starting a new stream). */
+  detachActiveStreamController: () => void;
+  /** User cancel: abort fetch and clear streaming UI. */
+  abortActiveStream: () => void;
 }
 
 export const useMessageStore = create<MessageState>((set, get) => ({
@@ -58,6 +66,27 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   isLoading: false,
   thinkingStep: null,
   streamingTools: [],
+  activeStreamController: null,
+
+  startStream: (controller: AbortController) => {
+    set({ activeStreamController: controller });
+  },
+
+  detachActiveStreamController: () => {
+    const prev = get().activeStreamController;
+    if (!prev) return;
+    set({ activeStreamController: null });
+    prev.abort();
+  },
+
+  abortActiveStream: () => {
+    const c = get().activeStreamController;
+    if (!c) return;
+    set({ activeStreamController: null });
+    c.abort();
+    set({ isLoading: false, thinkingStep: null });
+    get().resetStreaming();
+  },
 
   fetchMessages: async (sessionId: string) => {
     const msgs = await fetchApi<Message[]>(`/api/sessions/${sessionId}/messages`);

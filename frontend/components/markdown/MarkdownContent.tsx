@@ -16,39 +16,64 @@ function extractTextFromCodeChildren(children: ReactNode): string {
   return "";
 }
 
+function codeClassNameFromChild(child: unknown): string {
+  if (!isValidElement(child)) return "";
+  const p = child.props as { className?: string };
+  return String(p.className || "");
+}
+
+/** 模型可能输出 `language-A2UI` 或误标为 json；兼容检测。 */
+function looksLikeA2UIPayload(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return (
+    t.includes('"surfaceUpdate"') ||
+    t.includes('"beginRendering"') ||
+    t.includes('"surfaceId"')
+  );
+}
+
+/** fenced code 在部分环境下 pre 下会有空白文本节点 + code，不能只取 children[0] */
+function a2uiPayloadFromPre(preChildren: ReactNode): string | null {
+  const parts = Children.toArray(preChildren);
+  for (const child of parts) {
+    if (!isValidElement(child)) continue;
+    const cls = codeClassNameFromChild(child).toLowerCase();
+    const inner = (child.props as { children?: ReactNode }).children;
+    const text = extractTextFromCodeChildren(inner).replace(/\n$/, "");
+    if (!text.trim()) continue;
+    if (cls.includes("language-a2ui")) return text;
+    if (cls.includes("language-json") && looksLikeA2UIPayload(text)) return text;
+  }
+  return null;
+}
+
 export interface MarkdownContentProps {
   children: string;
   /** A2UI 按钮等交互回调，将发回对话继续 Agent Loop */
   onA2UIAction?: (action: A2UIAction) => void;
   className?: string;
+  /**
+   * 为 false 时不在 Markdown 内联渲染 ```a2ui```（显示为普通代码块）。
+   * 由 AssistantBubble 等将 A2UI 拆出单独成卡时使用。
+   */
+  embedA2UI?: boolean;
 }
 
 export function MarkdownContent({
   children,
   onA2UIAction,
   className,
+  embedA2UI = true,
 }: MarkdownContentProps) {
   const components: Components = {
     pre({ children: preChildren }) {
-      const only = Children.toArray(preChildren)[0];
-      if (
-        isValidElement(only) &&
-        only.props &&
-        typeof only.props === "object" &&
-        "className" in only.props &&
-        String((only.props as { className?: string }).className || "").includes(
-          "language-a2ui",
-        )
-      ) {
-        const text = extractTextFromCodeChildren(
-          (only.props as { children?: ReactNode }).children,
-        );
-        return (
-          <A2UISurfaceBlock source={text.replace(/\n$/, "")} onAction={onA2UIAction} />
-        );
+      const a2ui = embedA2UI ? a2uiPayloadFromPre(preChildren) : null;
+      if (a2ui !== null) {
+        return <A2UISurfaceBlock source={a2ui} onAction={onA2UIAction} />;
       }
       return (
-        <pre className="my-4 overflow-x-auto rounded-xl bg-gray-900 p-4 text-[13px] leading-relaxed text-gray-100">
+        <pre className="my-4 overflow-x-auto rounded-xl bg-muted p-4 text-[13px] leading-relaxed text-foreground">
           {preChildren}
         </pre>
       );
@@ -65,7 +90,7 @@ export function MarkdownContent({
       return (
         <code
           className={cn(
-            "rounded-md bg-gray-200/90 px-1.5 py-0.5 font-mono text-[0.9em] text-gray-900",
+            "rounded-md bg-muted px-1.5 py-0.5 font-mono text-[0.9em] text-foreground",
             className,
           )}
           {...props}

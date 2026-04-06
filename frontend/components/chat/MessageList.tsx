@@ -40,7 +40,7 @@ export function MessageList({ sessionId, onCardAction, onFormSubmit, onA2UIActio
   });
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-white">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-background">
       <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-8 md:px-8 md:py-10">
         {messages.map((msg) =>
           msg.role === "user" ? (
@@ -57,7 +57,9 @@ export function MessageList({ sessionId, onCardAction, onFormSubmit, onA2UIActio
         )}
         {thinkingStep && <ThinkingIndicator description={thinkingStep} />}
         <ToolCallStrip tools={streamingTools} />
-        {streamingContent !== null && <StreamingText content={streamingContent} />}
+        {streamingContent !== null && (
+          <StreamingText content={streamingContent} onA2UIAction={onA2UIAction} />
+        )}
         <div ref={bottomRef} />
       </div>
     </div>

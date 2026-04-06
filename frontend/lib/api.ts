@@ -15,6 +15,7 @@ export function createSSEConnection(
   onEvent: (event: { event: string; data: Record<string, unknown> }) => void,
   onDone: () => void,
   onError: (error: Error) => void,
+  onAbort?: () => void,
 ): AbortController {
   const controller = new AbortController();
 
@@ -30,7 +31,10 @@ export function createSSEConnection(
         return;
       }
       const reader = response.body?.getReader();
-      if (!reader) return;
+      if (!reader) {
+        onDone();
+        return;
+      }
 
       const decoder = new TextDecoder();
       let buffer = "";
@@ -48,35 +52,47 @@ export function createSSEConnection(
         }
       };
 
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
-        for (const line of lines) {
-          const normalized = line.replace(/\r$/, "");
-          if (normalized.startsWith("event: ")) {
-            currentEvent = normalized.slice(7);
-          } else if (normalized.startsWith("data: ")) {
-            currentData = normalized.slice(6);
-          } else if (normalized === "" && currentEvent && currentData) {
-            flushEvent(currentEvent, currentData);
-            currentEvent = "";
-            currentData = "";
+          for (const line of lines) {
+            const normalized = line.replace(/\r$/, "");
+            if (normalized.startsWith("event: ")) {
+              currentEvent = normalized.slice(7);
+            } else if (normalized.startsWith("data: ")) {
+              currentData = normalized.slice(6);
+            } else if (normalized === "" && currentEvent && currentData) {
+              flushEvent(currentEvent, currentData);
+              currentEvent = "";
+              currentData = "";
+            }
           }
         }
+        if (currentEvent && currentData) {
+          flushEvent(currentEvent, currentData);
+        }
+        onDone();
+      } catch (e: unknown) {
+        const err = e as { name?: string };
+        if (err?.name === "AbortError") {
+          onAbort?.();
+          return;
+        }
+        onError(e instanceof Error ? e : new Error(String(e)));
       }
-      // Stream ended without a trailing blank line — still dispatch last event
-      if (currentEvent && currentData) {
-        flushEvent(currentEvent, currentData);
-      }
-      onDone();
     })
     .catch((err: Error) => {
-      if (err.name !== "AbortError") onError(err);
+      if (err.name === "AbortError") {
+        onAbort?.();
+        return;
+      }
+      onError(err);
     });
 
   return controller;

@@ -13,7 +13,7 @@ interface CardRendererProps {
 
 export function CardRenderer({ cards, onAction, onFormSubmit }: CardRendererProps) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex w-full max-w-lg flex-col gap-4">
       {cards.map((card) => {
         switch (card.type) {
           case "info":

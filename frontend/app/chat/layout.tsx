@@ -3,7 +3,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 
 export default function ChatLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-background text-foreground">
       <TopBar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />

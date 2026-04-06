@@ -69,9 +69,13 @@ export function Sidebar() {
   };
 
   const sidebarContent = (
-    <div className="flex h-full w-[240px] flex-col border-r border-gray-100 bg-[#f7f8fa]">
+    <div className="flex h-full w-[240px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="p-2.5">
-        <Button onClick={handleNewChat} className="h-9 w-full gap-1.5 text-sm font-normal" variant="outline">
+        <Button
+          onClick={handleNewChat}
+          className="h-9 w-full gap-1.5 border-sidebar-border bg-sidebar text-sidebar-foreground text-sm font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          variant="outline"
+        >
           <Plus className="h-4 w-4" />
           新对话
         </Button>
@@ -83,12 +87,13 @@ export function Sidebar() {
               key={session.id}
               onClick={() => handleSelect(session.id)}
               className={cn(
-                "group flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-normal leading-snug transition-colors hover:bg-gray-200/80",
-                currentSessionId === session.id && "bg-white shadow-sm ring-1 ring-gray-200/80",
+                "group flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-normal leading-snug transition-colors hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground",
+                currentSessionId === session.id &&
+                  "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm ring-1 ring-sidebar-border",
               )}
             >
               <div className="flex w-full items-center justify-between">
-                <span className="truncate text-gray-800">
+                <span className="truncate">
                   {session.title?.trim() || "新对话"}
                 </span>
                 <span
@@ -96,15 +101,15 @@ export function Sidebar() {
                   tabIndex={0}
                   onClick={(e) => handleDelete(e, session.id)}
                   onKeyDown={(e) => { if (e.key === "Enter") handleDelete(e as unknown as React.MouseEvent, session.id); }}
-                  className="hidden shrink-0 rounded p-0.5 text-gray-400 hover:text-red-500 group-hover:block"
+                  className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive group-hover:block"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </span>
               </div>
               {session.summary && (
-                <span className="truncate text-xs text-gray-500">{session.summary}</span>
+                <span className="truncate text-xs text-muted-foreground">{session.summary}</span>
               )}
-              <span className="text-[11px] text-gray-400">
+              <span className="text-[11px] text-muted-foreground">
                 {formatTime(session.updated_at)}
               </span>
             </button>

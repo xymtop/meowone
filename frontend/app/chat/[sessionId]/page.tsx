@@ -29,6 +29,9 @@ export default function SessionPage() {
   const resetStreaming = useMessageStore((s) => s.resetStreaming);
   const pushToolCall = useMessageStore((s) => s.pushToolCall);
   const settleToolResult = useMessageStore((s) => s.settleToolResult);
+  const startStream = useMessageStore((s) => s.startStream);
+  const detachActiveStreamController = useMessageStore((s) => s.detachActiveStreamController);
+  const abortActiveStream = useMessageStore((s) => s.abortActiveStream);
 
   useEffect(() => {
     setCurrentSession(sessionId);
@@ -96,54 +99,140 @@ export default function SessionPage() {
 
   const handleCardAction = useCallback(
     (actionId: string, payload: Record<string, unknown>) => {
+      detachActiveStreamController();
       resetStreaming();
       setLoading(true);
-      createSSEConnection(
+      const controller = createSSEConnection(
         `/api/sessions/${sessionId}/card-action`,
         { cardId: "unknown", actionId, payload },
         handleSSEEvents,
         () => {
+          if (useMessageStore.getState().activeStreamController === controller) {
+            useMessageStore.setState({ activeStreamController: null });
+          }
           setLoading(false);
           void fetchMessages(sessionId);
         },
         () => {
+          if (useMessageStore.getState().activeStreamController === controller) {
+            useMessageStore.setState({ activeStreamController: null });
+          }
           setLoading(false);
           setThinking(null);
           void fetchMessages(sessionId);
         },
+        () => {
+          if (useMessageStore.getState().activeStreamController !== controller) return;
+          useMessageStore.setState({ activeStreamController: null });
+          setLoading(false);
+          setThinking(null);
+          resetStreaming();
+        },
       );
+      startStream(controller);
     },
-    [sessionId, handleSSEEvents, setLoading, setThinking, resetStreaming, fetchMessages],
+    [
+      sessionId,
+      handleSSEEvents,
+      setLoading,
+      setThinking,
+      resetStreaming,
+      fetchMessages,
+      detachActiveStreamController,
+      startStream,
+    ],
   );
 
   const handleA2UIAction = useCallback(
     (action: A2UIAction) => {
-      const line = `[A2UI 用户操作] ${JSON.stringify(action)}`;
-      sendMessage(line);
-    },
-    [sendMessage],
-  );
-
-  const handleFormSubmit = useCallback(
-    (cardId: string, data: Record<string, string>) => {
+      detachActiveStreamController();
       resetStreaming();
       setLoading(true);
-      createSSEConnection(
-        `/api/sessions/${sessionId}/card-action`,
-        { cardId, actionId: "form_submit", payload: data },
+      const controller = createSSEConnection(
+        `/api/sessions/${sessionId}/a2ui-action`,
+        { action },
         handleSSEEvents,
         () => {
+          if (useMessageStore.getState().activeStreamController === controller) {
+            useMessageStore.setState({ activeStreamController: null });
+          }
           setLoading(false);
           void fetchMessages(sessionId);
         },
         () => {
+          if (useMessageStore.getState().activeStreamController === controller) {
+            useMessageStore.setState({ activeStreamController: null });
+          }
           setLoading(false);
           setThinking(null);
           void fetchMessages(sessionId);
         },
+        () => {
+          if (useMessageStore.getState().activeStreamController !== controller) return;
+          useMessageStore.setState({ activeStreamController: null });
+          setLoading(false);
+          setThinking(null);
+          resetStreaming();
+        },
       );
+      startStream(controller);
     },
-    [sessionId, handleSSEEvents, setLoading, setThinking, resetStreaming, fetchMessages],
+    [
+      sessionId,
+      handleSSEEvents,
+      setLoading,
+      setThinking,
+      resetStreaming,
+      fetchMessages,
+      detachActiveStreamController,
+      startStream,
+    ],
+  );
+
+  const handleFormSubmit = useCallback(
+    (cardId: string, data: Record<string, string>) => {
+      detachActiveStreamController();
+      resetStreaming();
+      setLoading(true);
+      const controller = createSSEConnection(
+        `/api/sessions/${sessionId}/card-action`,
+        { cardId, actionId: "form_submit", payload: data },
+        handleSSEEvents,
+        () => {
+          if (useMessageStore.getState().activeStreamController === controller) {
+            useMessageStore.setState({ activeStreamController: null });
+          }
+          setLoading(false);
+          void fetchMessages(sessionId);
+        },
+        () => {
+          if (useMessageStore.getState().activeStreamController === controller) {
+            useMessageStore.setState({ activeStreamController: null });
+          }
+          setLoading(false);
+          setThinking(null);
+          void fetchMessages(sessionId);
+        },
+        () => {
+          if (useMessageStore.getState().activeStreamController !== controller) return;
+          useMessageStore.setState({ activeStreamController: null });
+          setLoading(false);
+          setThinking(null);
+          resetStreaming();
+        },
+      );
+      startStream(controller);
+    },
+    [
+      sessionId,
+      handleSSEEvents,
+      setLoading,
+      setThinking,
+      resetStreaming,
+      fetchMessages,
+      detachActiveStreamController,
+      startStream,
+    ],
   );
 
   return (
@@ -154,7 +243,11 @@ export default function SessionPage() {
         onFormSubmit={handleFormSubmit}
         onA2UIAction={handleA2UIAction}
       />
-      <InputBar onSend={sendMessage} disabled={isLoading} />
+      <InputBar
+        onSend={sendMessage}
+        isStreaming={isLoading}
+        onCancel={abortActiveStream}
+      />
     </>
   );
 }

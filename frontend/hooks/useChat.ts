@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { useMessageStore } from "@/stores/message";
 import { useSessionStore } from "@/stores/session";
 import { createSSEConnection } from "@/lib/api";
 import type { Card } from "@/types/card";
+import type { OutgoingAttachment } from "@/types/attachment";
 
 export function useChat(sessionId: string) {
-  const controllerRef = useRef<AbortController | null>(null);
   const addUserMessage = useMessageStore((s) => s.addUserMessage);
   const setLoading = useMessageStore((s) => s.setLoading);
   const setThinking = useMessageStore((s) => s.setThinking);
@@ -20,23 +20,32 @@ export function useChat(sessionId: string) {
   const settleToolResult = useMessageStore((s) => s.settleToolResult);
   const fetchMessages = useMessageStore((s) => s.fetchMessages);
   const fetchSessions = useSessionStore((s) => s.fetchSessions);
+  const startStream = useMessageStore((s) => s.startStream);
+  const detachActiveStreamController = useMessageStore((s) => s.detachActiveStreamController);
   const isLoading = useMessageStore((s) => s.isLoading);
 
   const sendMessage = useCallback(
-    (content: string) => {
-      if (!content.trim() || !sessionId) return;
+    (content: string, attachments?: OutgoingAttachment[]) => {
+      if (!content.trim() && !(attachments && attachments.length)) return;
+      if (!sessionId) return;
 
-      controllerRef.current?.abort();
+      detachActiveStreamController();
       resetStreaming();
 
-      addUserMessage(sessionId, content);
+      const display =
+        content.trim() ||
+        (attachments?.length ? `[${attachments.length} attachment(s)]` : "");
+      addUserMessage(sessionId, display);
       setLoading(true);
       setThinking(null);
 
-
-      controllerRef.current = createSSEConnection(
+      const controller = createSSEConnection(
         `/api/sessions/${sessionId}/chat`,
-        { content, type: "text" },
+        {
+          content: content.trim(),
+          type: "text",
+          attachments: attachments ?? [],
+        },
         (event) => {
           const { data } = event;
           switch (event.event) {
@@ -85,17 +94,32 @@ export function useChat(sessionId: string) {
           }
         },
         () => {
+          if (useMessageStore.getState().activeStreamController === controller) {
+            useMessageStore.setState({ activeStreamController: null });
+          }
           setLoading(false);
           void fetchMessages(sessionId);
           void fetchSessions();
         },
         () => {
+          if (useMessageStore.getState().activeStreamController === controller) {
+            useMessageStore.setState({ activeStreamController: null });
+          }
           setLoading(false);
           setThinking(null);
           void fetchMessages(sessionId);
           void fetchSessions();
         },
+        () => {
+          if (useMessageStore.getState().activeStreamController !== controller) return;
+          useMessageStore.setState({ activeStreamController: null });
+          setLoading(false);
+          setThinking(null);
+          resetStreaming();
+        },
       );
+
+      startStream(controller);
     },
     [
       sessionId,
@@ -111,6 +135,8 @@ export function useChat(sessionId: string) {
       settleToolResult,
       fetchMessages,
       fetchSessions,
+      startStream,
+      detachActiveStreamController,
     ],
   );
 
