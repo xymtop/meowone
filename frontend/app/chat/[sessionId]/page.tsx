@@ -27,6 +27,8 @@ export default function SessionPage() {
   const finalizeStream = useMessageStore((s) => s.finalizeStream);
   const addCardMessage = useMessageStore((s) => s.addCardMessage);
   const resetStreaming = useMessageStore((s) => s.resetStreaming);
+  const pushToolCall = useMessageStore((s) => s.pushToolCall);
+  const settleToolResult = useMessageStore((s) => s.settleToolResult);
 
   useEffect(() => {
     setCurrentSession(sessionId);
@@ -49,6 +51,14 @@ export default function SessionPage() {
           }
           appendStreamDelta(deltaContent);
           if (done) setThinking(null);
+          break;
+        }
+        case "tool_call": {
+          pushToolCall(data.toolCallId as string, data.name as string);
+          break;
+        }
+        case "tool_result": {
+          settleToolResult(data.toolCallId as string, data.ok as boolean);
           break;
         }
         case "card":
@@ -77,6 +87,8 @@ export default function SessionPage() {
       addCardMessage,
       finalizeStream,
       setLoading,
+      pushToolCall,
+      settleToolResult,
       fetchMessages,
       fetchSessions,
     ],

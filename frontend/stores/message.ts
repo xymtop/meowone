@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Message } from "@/types/message";
 import type { Card } from "@/types/card";
+import type { StreamingToolRow } from "@/types/tool-activity";
 import { fetchApi } from "@/lib/api";
 
 function mergeCardData(
@@ -34,6 +35,8 @@ interface MessageState {
   streamingMessageId: string | null;
   isLoading: boolean;
   thinkingStep: string | null;
+  /** Current SSE turn: tool names + status (generic for any backend tool). */
+  streamingTools: StreamingToolRow[];
   fetchMessages: (sessionId: string) => Promise<void>;
   addUserMessage: (sessionId: string, content: string) => void;
   appendStreamDelta: (content: string) => void;
@@ -42,6 +45,8 @@ interface MessageState {
   addCardMessage: (sessionId: string, messageId: string, card: Card) => void;
   setThinking: (step: string | null) => void;
   setLoading: (loading: boolean) => void;
+  pushToolCall: (toolCallId: string, name: string) => void;
+  settleToolResult: (toolCallId: string, ok: boolean) => void;
   /** Clear streaming state before a new chat request (avoids stale ids from the previous turn). */
   resetStreaming: () => void;
 }
@@ -52,6 +57,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   streamingMessageId: null,
   isLoading: false,
   thinkingStep: null,
+  streamingTools: [],
 
   fetchMessages: async (sessionId: string) => {
     const msgs = await fetchApi<Message[]>(`/api/sessions/${sessionId}/messages`);
@@ -124,6 +130,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         messages: { ...state.messages, [sessionId]: nextList },
         streamingContent: null,
         streamingMessageId: null,
+        streamingTools: [],
       };
     });
   },
@@ -165,6 +172,25 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     });
   },
 
+  pushToolCall: (toolCallId: string, name: string) => {
+    set((state) => ({
+      streamingTools: [
+        ...state.streamingTools,
+        { toolCallId, name, status: "running" },
+      ],
+    }));
+  },
+
+  settleToolResult: (toolCallId: string, ok: boolean) => {
+    set((state) => ({
+      streamingTools: state.streamingTools.map((row) =>
+        row.toolCallId === toolCallId && row.status === "running"
+          ? { ...row, status: ok ? ("ok" as const) : ("error" as const) }
+          : row,
+      ),
+    }));
+  },
+
   setThinking: (step: string | null) => {
     set({ thinkingStep: step });
   },
@@ -174,6 +200,11 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   },
 
   resetStreaming: () => {
-    set({ streamingContent: null, streamingMessageId: null, thinkingStep: null });
+    set({
+      streamingContent: null,
+      streamingMessageId: null,
+      thinkingStep: null,
+      streamingTools: [],
+    });
   },
 }));

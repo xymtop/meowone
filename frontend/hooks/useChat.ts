@@ -16,6 +16,8 @@ export function useChat(sessionId: string) {
   const finalizeStream = useMessageStore((s) => s.finalizeStream);
   const addCardMessage = useMessageStore((s) => s.addCardMessage);
   const resetStreaming = useMessageStore((s) => s.resetStreaming);
+  const pushToolCall = useMessageStore((s) => s.pushToolCall);
+  const settleToolResult = useMessageStore((s) => s.settleToolResult);
   const fetchMessages = useMessageStore((s) => s.fetchMessages);
   const fetchSessions = useSessionStore((s) => s.fetchSessions);
   const isLoading = useMessageStore((s) => s.isLoading);
@@ -50,6 +52,18 @@ export function useChat(sessionId: string) {
               }
               appendStreamDelta(deltaContent);
               if (done) setThinking(null);
+              break;
+            }
+            case "tool_call": {
+              const toolCallId = data.toolCallId as string;
+              const name = data.name as string;
+              pushToolCall(toolCallId, name);
+              break;
+            }
+            case "tool_result": {
+              const toolCallId = data.toolCallId as string;
+              const ok = data.ok as boolean;
+              settleToolResult(toolCallId, ok);
               break;
             }
             case "card":
@@ -93,6 +107,8 @@ export function useChat(sessionId: string) {
       finalizeStream,
       addCardMessage,
       resetStreaming,
+      pushToolCall,
+      settleToolResult,
       fetchMessages,
       fetchSessions,
     ],

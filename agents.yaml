@@ -1,0 +1,15 @@
+# Remote A2A agents (a2a-sdk servers). Start them first, then the main backend.
+agents:
+  - tool_name: code_writer
+    description: >
+      Specialist for writing, refactoring, and reviewing code; concise technical explanations.
+      Use when the user asks for implementation, debugging help, or code review.
+    base_url: http://127.0.0.1:8001
+    enabled: true
+
+  - tool_name: doc_assistant
+    description: >
+      Specialist for documentation, summaries, outlines, and clear writing.
+      Use when the user asks for README-style docs, summaries, or rewrites.
+    base_url: http://127.0.0.1:8002
+    enabled: true

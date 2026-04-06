@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Dict, Optional, List
 from app.capability.base import BaseCapability
+from app.capability.tool_base import BaseTool
 
 
 class CapabilityRegistry:
@@ -20,10 +21,15 @@ class CapabilityRegistry:
         return [cap.to_openai_tool() for cap in self._capabilities.values()]
 
     def to_descriptions(self) -> List[Dict[str, str]]:
-        return [
-            {"name": cap.name, "description": cap.description}
-            for cap in self._capabilities.values()
-        ]
+        out: List[Dict[str, str]] = []
+        for cap in self._capabilities.values():
+            if isinstance(cap, BaseTool):
+                meta = f"[{cap.permission}/{cap.category}]"
+                desc = f"{meta} {cap.description}"
+            else:
+                desc = cap.description
+            out.append({"name": cap.name, "description": desc})
+        return out
 
 
 registry = CapabilityRegistry()

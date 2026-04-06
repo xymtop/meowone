@@ -3,6 +3,7 @@ import json
 import uuid
 from typing import Optional, List, Dict, Any
 from app.db.database import get_db
+from app.services.session_service import set_session_title_if_unset
 
 
 def _parse_message(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -45,6 +46,8 @@ async def create_message(
             (session_id,),
         )
         await db.commit()
+        if role == "user":
+            await set_session_title_if_unset(session_id, content)
         cursor = await db.execute("SELECT * FROM messages WHERE id = ?", (message_id,))
         row = await cursor.fetchone()
         return dict(row)

@@ -141,6 +141,8 @@ async def chat_completion_stream(
     }
     if tools:
         payload["tools"] = tools
+        # 允许模型在同一轮 assistant 消息中返回多个 tool_calls（后端用 asyncio 并行执行）
+        payload["parallel_tool_calls"] = True
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:

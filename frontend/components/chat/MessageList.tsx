@@ -8,6 +8,7 @@ import { UserBubble } from "./UserBubble";
 import { AssistantBubble } from "./AssistantBubble";
 import { StreamingText } from "./StreamingText";
 import { ThinkingIndicator } from "./ThinkingIndicator";
+import { ToolCallStrip } from "./ToolCallStrip";
 import type { Message } from "@/types/message";
 
 /** Stable fallback — `|| []` inside a Zustand selector returns a new array every snapshot and breaks useSyncExternalStore (React 19). */
@@ -21,11 +22,12 @@ interface MessageListProps {
 }
 
 export function MessageList({ sessionId, onCardAction, onFormSubmit, onA2UIAction }: MessageListProps) {
-  const { messages, streamingContent, thinkingStep } = useMessageStore(
+  const { messages, streamingContent, thinkingStep, streamingTools } = useMessageStore(
     useShallow((s) => ({
       messages: s.messages[sessionId] ?? EMPTY_MESSAGES,
       streamingContent: s.streamingContent,
       thinkingStep: s.thinkingStep,
+      streamingTools: s.streamingTools,
     })),
   );
 
@@ -33,7 +35,7 @@ export function MessageList({ sessionId, onCardAction, onFormSubmit, onA2UIActio
   const bottomRef = useAutoScroll({
     messageCount: messages.length,
     lastMessageId: lastMsg?.id,
-    streamingLen: streamingContent?.length ?? 0,
+    streamingLen: (streamingContent?.length ?? 0) + streamingTools.length,
     thinkingStep,
   });
 
@@ -54,6 +56,7 @@ export function MessageList({ sessionId, onCardAction, onFormSubmit, onA2UIActio
           ),
         )}
         {thinkingStep && <ThinkingIndicator description={thinkingStep} />}
+        <ToolCallStrip tools={streamingTools} />
         {streamingContent !== null && <StreamingText content={streamingContent} />}
         <div ref={bottomRef} />
       </div>

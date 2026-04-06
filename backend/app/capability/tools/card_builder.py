@@ -1,15 +1,20 @@
 from __future__ import annotations
 import uuid
 from typing import Any, Dict
-from app.capability.base import BaseCapability
+from app.capability.tool_base import BaseTool
 
 
-class CardBuilderCapability(BaseCapability):
+class CardBuilderCapability(BaseTool):
     name = "card_builder"
+    display_name = "MeowOne Card (legacy UI)"
     description = (
-        "Build a UI card to display information, request user action, or collect user input. "
-        "Use this when you want to show structured information, ask for confirmation, or collect form data from the user."
+        "Optional legacy card UI (NOT the A2UI protocol). "
+        "Prefer Google A2UI v0.8 in a Markdown fenced code block with language tag `a2ui`. "
+        "Use this only for simple server-driven info/action/form panels."
     )
+    permission = "standard"
+    category = "ui"
+    tags = ("card", "legacy")
     parameters_schema = {
         "type": "object",
         "properties": {

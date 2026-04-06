@@ -5,3 +5,5 @@ aiosqlite==0.21.0
 python-dotenv==1.1.0
 pydantic==2.11.3
 sse-starlette==2.3.3
+a2a-sdk[http-server]>=0.3.25
+PyYAML>=6.0.2

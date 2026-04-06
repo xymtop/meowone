@@ -27,6 +27,7 @@ class CardEvent:
 
 @dataclass
 class ToolCallEvent:
+    tool_call_id: str
     capability_name: str
     params: Dict[str, Any]
     event_type: str = field(default="tool_call", init=False)
@@ -34,8 +35,10 @@ class ToolCallEvent:
 
 @dataclass
 class ToolResultEvent:
+    tool_call_id: str
     capability_name: str
     result: Any
+    success: bool
     event_type: str = field(default="tool_result", init=False)
 
 

@@ -1,9 +1,13 @@
 from __future__ import annotations
-import time
+import asyncio
 import json
+import logging
+import time
 import uuid
 from typing import AsyncIterator, Optional, List, Dict, Any
 
+from app.capability.tool_base import ToolExecutionResult
+from app.config_loaders import build_extra_system_prompt
 from app.loop.events import (
     ThinkingEvent, DeltaEvent, CardEvent, ToolCallEvent,
     ToolResultEvent, ErrorEvent, DoneEvent, LoopEvent,
@@ -12,7 +16,10 @@ from app.loop.context import LoopContext
 from app.capability.registry import CapabilityRegistry
 from app.llm.client import chat_completion_stream
 from app.llm.prompts import build_system_prompt
-from app.config import LOOP_MAX_ROUNDS, LOOP_TIMEOUT_SECONDS
+from app.config import LOOP_MAX_ROUNDS, LOOP_MAX_TOOL_PHASES, LOOP_TIMEOUT_SECONDS
+
+# 调度与工具执行日志（便于排查「是否并行」「哪一步失败」）
+logger = logging.getLogger(__name__)
 
 
 async def run_loop(
@@ -31,8 +38,12 @@ async def run_loop(
 
     start_time = time.time()
     round_num = 0
+    tool_phases = 0
 
-    system_prompt = build_system_prompt(capabilities.to_descriptions())
+    system_prompt = build_system_prompt(
+        capabilities.to_descriptions(),
+        extra_system=build_extra_system_prompt(),
+    )
     context = LoopContext(system_prompt, history)
     context.add_user_message(user_message)
 
@@ -79,53 +90,131 @@ async def run_loop(
             break
 
         if tool_calls:
+            # 单条 assistant 消息携带本轮全部 tool_calls，便于模型并行发起多工具 + 服务端 asyncio 真并行
+            context.add_assistant_tool_calls(
+                [
+                    {"id": tc["id"], "name": tc["name"], "arguments": tc["arguments"]}
+                    for tc in tool_calls
+                ]
+            )
+            names = [tc["name"] for tc in tool_calls]
+            logger.info(
+                "本轮并行调度: round=%s tools=%s count=%s",
+                round_num,
+                names,
+                len(tool_calls),
+            )
+            desc = (
+                f"并行执行 {len(tool_calls)} 个工具: {', '.join(names)}"
+                if len(tool_calls) > 1
+                else f"Using {names[0]}..."
+            )
+            yield ThinkingEvent(step=round_num, description=desc)
+
             for tc in tool_calls:
-                context.add_tool_call(tc["id"], tc["name"], tc["arguments"])
-
-                capability = capabilities.get(tc["name"])
-                if not capability:
-                    context.add_tool_result(
-                        tc["id"],
-                        json.dumps({"error": f"Unknown capability: {tc['name']}"}),
-                    )
-                    yield ErrorEvent(
-                        code="UNKNOWN_CAPABILITY",
-                        message=f"Unknown capability: {tc['name']}",
-                    )
-                    continue
-
-                yield ThinkingEvent(step=round_num, description=f"Using {tc['name']}...")
-                yield ToolCallEvent(
-                    capability_name=tc["name"],
-                    params=json.loads(tc["arguments"]),
-                )
-
                 try:
                     params = json.loads(tc["arguments"])
-                    result = await capability.execute(params)
-                    result_str = (
-                        json.dumps(result, ensure_ascii=False)
-                        if not isinstance(result, str)
-                        else result
+                except json.JSONDecodeError:
+                    params = {}
+                yield ToolCallEvent(
+                    tool_call_id=str(tc["id"]),
+                    capability_name=tc["name"],
+                    params=params,
+                )
+
+            async def _execute_one(tc: Dict[str, Any]) -> Dict[str, Any]:
+                """执行单个工具；异常在内部转为错误结果字符串，保证 gather 不因单路失败而整批中断。"""
+                tid = tc["id"]
+                name = tc["name"]
+                capability = capabilities.get(name)
+                if not capability:
+                    err = json.dumps(
+                        {"error": f"Unknown capability: {name}"}, ensure_ascii=False
                     )
-
-                    context.add_tool_result(tc["id"], result_str)
-                    yield ToolResultEvent(capability_name=tc["name"], result=result)
-
-                    if (
-                        isinstance(result, dict)
-                        and "type" in result
-                        and result["type"] in ("info", "action", "form")
-                    ):
-                        yield CardEvent(message_id=message_id, card=result)
-
+                    logger.warning("未知工具: %s", name)
+                    return {
+                        "tool_call_id": tid,
+                        "name": name,
+                        "result_str": err,
+                        "result": None,
+                        "stop_loop": False,
+                        "error_code": "UNKNOWN_CAPABILITY",
+                        "error_message": f"Unknown capability: {name}",
+                    }
+                try:
+                    raw_args = tc.get("arguments") or "{}"
+                    params = json.loads(raw_args)
+                    raw = await capability.execute(params)
+                    stop_loop = False
+                    payload: Any = raw
+                    if isinstance(raw, ToolExecutionResult):
+                        stop_loop = raw.stop_loop
+                        payload = raw.payload
+                    if isinstance(payload, (dict, list)):
+                        result_str = json.dumps(payload, ensure_ascii=False)
+                    else:
+                        result_str = str(payload)
+                    logger.info("工具完成: %s id=%s stop_loop=%s", name, tid, stop_loop)
+                    return {
+                        "tool_call_id": tid,
+                        "name": name,
+                        "result_str": result_str,
+                        "result": payload,
+                        "stop_loop": stop_loop,
+                        "error_code": None,
+                        "error_message": None,
+                    }
                 except Exception as e:
-                    error_result = json.dumps({"error": str(e)})
-                    context.add_tool_result(tc["id"], error_result)
+                    logger.exception("工具失败: %s", name)
+                    err = json.dumps({"error": str(e)}, ensure_ascii=False)
+                    return {
+                        "tool_call_id": tid,
+                        "name": name,
+                        "result_str": err,
+                        "result": None,
+                        "stop_loop": False,
+                        "error_code": "TOOL_ERROR",
+                        "error_message": f"{name} failed: {e}",
+                    }
+
+            outcomes = await asyncio.gather(*[_execute_one(tc) for tc in tool_calls])
+
+            for out in outcomes:
+                context.add_tool_result(out["tool_call_id"], out["result_str"])
+                payload = out["result"] if out["result"] is not None else out["result_str"]
+                ok = out.get("error_code") is None
+                yield ToolResultEvent(
+                    tool_call_id=out["tool_call_id"],
+                    capability_name=out["name"],
+                    result=payload,
+                    success=ok,
+                )
+                if out["error_code"] == "UNKNOWN_CAPABILITY":
+                    yield ErrorEvent(
+                        code="UNKNOWN_CAPABILITY",
+                        message=out["error_message"] or "",
+                    )
+                elif out["error_code"] == "TOOL_ERROR":
                     yield ErrorEvent(
                         code="TOOL_ERROR",
-                        message=f"{tc['name']} failed: {str(e)}",
+                        message=out["error_message"] or "",
                     )
+                else:
+                    res = out["result"]
+                    if (
+                        isinstance(res, dict)
+                        and "type" in res
+                        and res["type"] in ("info", "action", "form")
+                    ):
+                        yield CardEvent(message_id=message_id, card=res)
+
+            tool_phases += 1
+            if tool_phases >= LOOP_MAX_TOOL_PHASES:
+                logger.info(
+                    "Stopping agent loop: LOOP_MAX_TOOL_PHASES=%s reached (no further tool rounds).",
+                    LOOP_MAX_TOOL_PHASES,
+                )
+                break
 
             continue
 

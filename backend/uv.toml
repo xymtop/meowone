@@ -1,0 +1,4 @@
+# Same as repo root: default PyPI index via Tsinghua mirror
+[[index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true

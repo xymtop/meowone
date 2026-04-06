@@ -6,8 +6,13 @@ from app.models.message import ChatRequest, CardActionRequest
 from app.services import message_service
 from app.loop.runtime import run_loop
 from app.loop.events import (
-    ThinkingEvent, DeltaEvent, CardEvent, ErrorEvent, DoneEvent,
-    ToolCallEvent, ToolResultEvent,
+    ThinkingEvent,
+    DeltaEvent,
+    CardEvent,
+    ErrorEvent,
+    DoneEvent,
+    ToolCallEvent,
+    ToolResultEvent,
 )
 from app.capability.registry import registry
 
@@ -59,6 +64,23 @@ async def _stream_loop(session_id: str, user_content: str):
                 "data": json.dumps({
                     "messageId": event.message_id,
                     "card": event.card,
+                }),
+            }
+        elif isinstance(event, ToolCallEvent):
+            yield {
+                "event": "tool_call",
+                "data": json.dumps({
+                    "toolCallId": event.tool_call_id,
+                    "name": event.capability_name,
+                }),
+            }
+        elif isinstance(event, ToolResultEvent):
+            yield {
+                "event": "tool_result",
+                "data": json.dumps({
+                    "toolCallId": event.tool_call_id,
+                    "name": event.capability_name,
+                    "ok": event.success,
                 }),
             }
         elif isinstance(event, ErrorEvent):

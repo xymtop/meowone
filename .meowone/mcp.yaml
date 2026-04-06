@@ -1,0 +1,9 @@
+# MCP servers (stdio). Use tools: list_mcp_tools, call_mcp_tool
+# Example:
+# servers:
+#   - name: fs
+#     description: Local filesystem MCP
+#     command: npx -y @modelcontextprotocol/server-filesystem .
+#     cwd: .
+
+servers: []

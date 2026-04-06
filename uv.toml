@@ -1,0 +1,5 @@
+# Project-wide uv index: Tsinghua PyPI mirror (faster in mainland China)
+# Docs: https://docs.astral.sh/uv/concepts/indexes/
+[[index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
