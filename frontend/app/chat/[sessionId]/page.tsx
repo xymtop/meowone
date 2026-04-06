@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback } from "react";
+import type { A2UIAction } from "@a2ui-sdk/react/0.8";
 import { useParams } from "next/navigation";
 import { MessageList } from "@/components/chat/MessageList";
 import { InputBar } from "@/components/layout/InputBar";
@@ -15,6 +16,7 @@ export default function SessionPage() {
   const sessionId = typeof params.sessionId === "string" ? params.sessionId : params.sessionId?.[0] ?? "";
 
   const fetchMessages = useMessageStore((s) => s.fetchMessages);
+  const fetchSessions = useSessionStore((s) => s.fetchSessions);
   const setCurrentSession = useSessionStore((s) => s.setCurrentSession);
   const { sendMessage, isLoading } = useChat(sessionId);
 
@@ -57,11 +59,13 @@ export default function SessionPage() {
           setLoading(false);
           setThinking(null);
           void fetchMessages(sessionId);
+          void fetchSessions();
           break;
         case "error":
           setLoading(false);
           setThinking(null);
           void fetchMessages(sessionId);
+          void fetchSessions();
           break;
       }
     },
@@ -74,6 +78,7 @@ export default function SessionPage() {
       finalizeStream,
       setLoading,
       fetchMessages,
+      fetchSessions,
     ],
   );
 
@@ -97,6 +102,14 @@ export default function SessionPage() {
       );
     },
     [sessionId, handleSSEEvents, setLoading, setThinking, resetStreaming, fetchMessages],
+  );
+
+  const handleA2UIAction = useCallback(
+    (action: A2UIAction) => {
+      const line = `[A2UI 用户操作] ${JSON.stringify(action)}`;
+      sendMessage(line);
+    },
+    [sendMessage],
   );
 
   const handleFormSubmit = useCallback(
@@ -127,6 +140,7 @@ export default function SessionPage() {
         sessionId={sessionId}
         onCardAction={handleCardAction}
         onFormSubmit={handleFormSubmit}
+        onA2UIAction={handleA2UIAction}
       />
       <InputBar onSend={sendMessage} disabled={isLoading} />
     </>

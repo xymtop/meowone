@@ -17,7 +17,7 @@ export function InputBar({ onSend, disabled }: InputBarProps) {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 280)}px`;
   }, []);
 
   const handleSend = useCallback(() => {
@@ -30,19 +30,9 @@ export function InputBar({ onSend, disabled }: InputBarProps) {
     }
   }, [value, disabled, onSend]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
-    },
-    [handleSend],
-  );
-
   return (
-    <div className="border-t bg-white px-4 py-3">
-      <div className="mx-auto flex max-w-3xl items-end gap-2">
+    <div className="border-t border-gray-100 bg-white/95 px-3 py-4 backdrop-blur md:px-6 md:py-5">
+      <div className="mx-auto flex max-w-4xl items-end gap-3">
         <textarea
           ref={textareaRef}
           value={value}
@@ -50,22 +40,21 @@ export function InputBar({ onSend, disabled }: InputBarProps) {
             setValue(e.target.value);
             adjustHeight();
           }}
-          onKeyDown={handleKeyDown}
-          placeholder="Type a message..."
+          placeholder="输入消息（回车换行）；仅点击按钮发送"
           disabled={disabled}
-          rows={1}
-          className="flex-1 resize-none rounded-xl border bg-gray-50 px-4 py-3 text-sm outline-none placeholder:text-gray-400 focus:border-blue-300 focus:ring-1 focus:ring-blue-300 disabled:opacity-50"
+          rows={2}
+          className="min-h-[52px] flex-1 resize-none rounded-2xl border border-gray-200 bg-gray-50 px-5 py-3.5 text-[15px] leading-relaxed outline-none placeholder:text-gray-400 focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:opacity-50 md:min-h-[56px] md:text-base"
         />
         <Button
           onClick={handleSend}
           disabled={disabled || !value.trim()}
           size="icon"
-          className="h-10 w-10 shrink-0 rounded-xl"
+          className="h-12 w-12 shrink-0 rounded-2xl md:h-14 md:w-14"
         >
           {disabled ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-5 w-5 animate-spin md:h-6 md:w-6" />
           ) : (
-            <Send className="h-4 w-4" />
+            <Send className="h-5 w-5 md:h-6 md:w-6" />
           )}
         </Button>
       </div>

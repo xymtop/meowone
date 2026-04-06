@@ -2,6 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import { useMessageStore } from "@/stores/message";
+import { useSessionStore } from "@/stores/session";
 import { createSSEConnection } from "@/lib/api";
 import type { Card } from "@/types/card";
 
@@ -16,6 +17,7 @@ export function useChat(sessionId: string) {
   const addCardMessage = useMessageStore((s) => s.addCardMessage);
   const resetStreaming = useMessageStore((s) => s.resetStreaming);
   const fetchMessages = useMessageStore((s) => s.fetchMessages);
+  const fetchSessions = useSessionStore((s) => s.fetchSessions);
   const isLoading = useMessageStore((s) => s.isLoading);
 
   const sendMessage = useCallback(
@@ -58,22 +60,26 @@ export function useChat(sessionId: string) {
               setLoading(false);
               setThinking(null);
               void fetchMessages(sessionId);
+              void fetchSessions();
               break;
             case "error":
               setLoading(false);
               setThinking(null);
               void fetchMessages(sessionId);
+              void fetchSessions();
               break;
           }
         },
         () => {
           setLoading(false);
           void fetchMessages(sessionId);
+          void fetchSessions();
         },
         () => {
           setLoading(false);
           setThinking(null);
           void fetchMessages(sessionId);
+          void fetchSessions();
         },
       );
     },
@@ -88,6 +94,7 @@ export function useChat(sessionId: string) {
       addCardMessage,
       resetStreaming,
       fetchMessages,
+      fetchSessions,
     ],
   );
 

@@ -29,7 +29,7 @@ export function FormCardComponent({ card, onSubmit }: FormCardProps) {
     <div className="rounded-xl border bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
         {card.icon && <span className="text-lg">{card.icon}</span>}
-        <h3 className="font-semibold">{card.title}</h3>
+        <h3 className="text-[15px] font-normal text-gray-900">{card.title}</h3>
       </div>
       <form onSubmit={handleSubmit} className="space-y-3">
         {card.fields.map((field) => (
@@ -45,9 +45,14 @@ export function FormCardComponent({ card, onSubmit }: FormCardProps) {
                 required={field.required}
                 className="w-full rounded-md border bg-white px-3 py-2 text-sm outline-none focus:border-blue-300 focus:ring-1 focus:ring-blue-300"
               >
-                <option value="">{field.placeholder || "Select..."}</option>
-                {field.options?.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
+                <option key={`${field.name}-placeholder`} value="">
+                  {field.placeholder || "Select..."}
+                </option>
+                {field.options?.map((opt, idx) => (
+                  <option
+                    key={`${field.name}-opt-${idx}-${String(opt.value)}`}
+                    value={opt.value}
+                  >
                     {opt.label}
                   </option>
                 ))}

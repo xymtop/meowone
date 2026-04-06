@@ -27,7 +27,7 @@ export function ActionCardComponent({ card, onAction }: ActionCardProps) {
     <div className="rounded-xl border bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
         {card.icon && <span className="text-lg">{card.icon}</span>}
-        <h3 className="font-semibold">{card.title}</h3>
+        <h3 className="text-[15px] font-normal text-gray-900">{card.title}</h3>
         <StatusIcon status={card.status} />
       </div>
       <div className="mb-3 space-y-1.5">

@@ -9,23 +9,40 @@ import { useSessionStore } from "@/stores/session";
 import { useUIStore } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 
+/** SQLite / API 返回的 `YYYY-MM-DD HH:MM:SS` 按 UTC 解析（与后端 datetime('now') 一致） */
+function parseDbDate(dateStr: string): Date {
+  const s = dateStr.trim();
+  if (!s) return new Date();
+  if (s.includes("T")) return new Date(s);
+  return new Date(s.replace(" ", "T") + "Z");
+}
+
+/** 中文相对时间，避免误解析本地时区导致「差 8 小时」 */
 function formatTime(dateStr: string) {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  return d.toLocaleDateString();
+  const d = parseDbDate(dateStr);
+  const now = Date.now();
+  const diffMs = now - d.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 0) return "刚刚";
+  if (diffSec < 60) return "刚刚";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} 分钟前`;
+  const diffHr = Math.floor(diffSec / 3600);
+  if (diffHr < 24) return `${diffHr} 小时前`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay} 天前`;
+  return d.toLocaleString("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export function Sidebar() {
   const router = useRouter();
   const { sessions, currentSessionId, fetchSessions, createSession, deleteSession, setCurrentSession } =
     useSessionStore();
-  const { sidebarOpen, toggleSidebar } = useUIStore();
+  const { sidebarOpen, toggleSidebar, sidebarCollapsed } = useUIStore();
 
   useEffect(() => {
     fetchSessions();
@@ -52,11 +69,11 @@ export function Sidebar() {
   };
 
   const sidebarContent = (
-    <div className="flex h-full w-[280px] flex-col border-r bg-gray-50">
-      <div className="p-3">
-        <Button onClick={handleNewChat} className="w-full gap-2" variant="outline">
+    <div className="flex h-full w-[240px] flex-col border-r border-gray-100 bg-[#f7f8fa]">
+      <div className="p-2.5">
+        <Button onClick={handleNewChat} className="h-9 w-full gap-1.5 text-sm font-normal" variant="outline">
           <Plus className="h-4 w-4" />
-          New Chat
+          新对话
         </Button>
       </div>
       <ScrollArea className="flex-1">
@@ -66,13 +83,13 @@ export function Sidebar() {
               key={session.id}
               onClick={() => handleSelect(session.id)}
               className={cn(
-                "group flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-gray-100",
-                currentSessionId === session.id && "bg-blue-50 hover:bg-blue-50",
+                "group flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-normal leading-snug transition-colors hover:bg-gray-200/80",
+                currentSessionId === session.id && "bg-white shadow-sm ring-1 ring-gray-200/80",
               )}
             >
               <div className="flex w-full items-center justify-between">
-                <span className="truncate font-medium">
-                  {session.title || "New Chat"}
+                <span className="truncate text-gray-800">
+                  {session.title?.trim() || "新对话"}
                 </span>
                 <span
                   role="button"
@@ -99,8 +116,15 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:block">{sidebarContent}</aside>
+      {/* 桌面端：可折叠侧栏，折叠时宽度为 0 以让出中间对话区 */}
+      <aside
+        className={cn(
+          "hidden shrink-0 overflow-hidden transition-[width] duration-200 ease-out md:block",
+          sidebarCollapsed ? "w-0 border-transparent" : "w-[240px]",
+        )}
+      >
+        <div className="h-full w-[240px]">{sidebarContent}</div>
+      </aside>
 
       {/* Mobile drawer */}
       {sidebarOpen && (

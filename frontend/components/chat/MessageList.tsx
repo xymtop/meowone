@@ -1,5 +1,6 @@
 "use client";
 
+import type { A2UIAction } from "@a2ui-sdk/react/0.8";
 import { useShallow } from "zustand/react/shallow";
 import { useMessageStore } from "@/stores/message";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
@@ -16,9 +17,10 @@ interface MessageListProps {
   sessionId: string;
   onCardAction?: (actionId: string, payload: Record<string, unknown>) => void;
   onFormSubmit?: (cardId: string, data: Record<string, string>) => void;
+  onA2UIAction?: (action: A2UIAction) => void;
 }
 
-export function MessageList({ sessionId, onCardAction, onFormSubmit }: MessageListProps) {
+export function MessageList({ sessionId, onCardAction, onFormSubmit, onA2UIAction }: MessageListProps) {
   const { messages, streamingContent, thinkingStep } = useMessageStore(
     useShallow((s) => ({
       messages: s.messages[sessionId] ?? EMPTY_MESSAGES,
@@ -36,8 +38,8 @@ export function MessageList({ sessionId, onCardAction, onFormSubmit }: MessageLi
   });
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-white">
+      <div className="mx-auto flex max-w-4xl flex-col gap-5 px-4 py-8 md:px-8 md:py-10">
         {messages.map((msg) =>
           msg.role === "user" ? (
             <UserBubble key={msg.id} message={msg} />
@@ -47,6 +49,7 @@ export function MessageList({ sessionId, onCardAction, onFormSubmit }: MessageLi
               message={msg}
               onCardAction={onCardAction}
               onFormSubmit={onFormSubmit}
+              onA2UIAction={onA2UIAction}
             />
           ),
         )}
