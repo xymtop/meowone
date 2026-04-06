@@ -1,0 +1,35 @@
+# Dependencies & build
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Env & secrets (examples are tracked)
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+!.env.example
+!**/.env.example
+
+# Local data
+*.db
+backend/*.db
+
+# IDE & OS
+.DS_Store
+.idea/
+*.swp
+
+# Debug logs
+npm-debug.log*
+*.log
