@@ -1,4 +1,4 @@
-"""从 YAML 加载远程 A2A 工具配置（优先 `.meowone/agents.yaml`，回退仓库根 `agents.yaml`）。"""
+"""从 YAML 加载远程 A2A 工具配置（`.meowone/agents.yaml`，或环境变量 AGENTS_CONFIG_PATH）。"""
 from __future__ import annotations
 
 import logging
@@ -31,16 +31,14 @@ def resolve_agents_yaml_path() -> Path | None:
         p = Path(env)
         p = p if p.is_absolute() else root / p
         return p if p.is_file() else None
-    for candidate in (root / ".meowone" / "agents.yaml", root / "agents.yaml"):
-        if candidate.is_file():
-            return candidate
-    return None
+    candidate = root / ".meowone" / "agents.yaml"
+    return candidate if candidate.is_file() else None
 
 
 def load_remote_agents() -> List[RemoteAgentEntry]:
     path = resolve_agents_yaml_path()
     if path is None:
-        logger.warning("未找到 agents 配置（尝试 .meowone/agents.yaml 与 agents.yaml）")
+        logger.warning("未找到 agents 配置（.meowone/agents.yaml 或 AGENTS_CONFIG_PATH）")
         return []
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     agents: List[RemoteAgentEntry] = []

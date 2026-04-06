@@ -1,0 +1,131 @@
+"""Load MCP servers from `.meowone/mcp.json` (preferred) or legacy `mcp.yaml`."""
+from __future__ import annotations
+
+import json
+import shlex
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import yaml
+
+from app.config import MEOWONE_CONFIG_DIR
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def mcp_json_path() -> Path:
+    p = Path(MEOWONE_CONFIG_DIR)
+    if not p.is_absolute():
+        p = _repo_root() / p
+    return p / "mcp.json"
+
+
+def mcp_yaml_path() -> Path:
+    p = Path(MEOWONE_CONFIG_DIR)
+    if not p.is_absolute():
+        p = _repo_root() / p
+    return p / "mcp.yaml"
+
+
+@dataclass
+class McpServerEntry:
+    name: str
+    command: str
+    cwd: Optional[str] = None
+    description: str = ""
+
+
+def _command_from_parts(command: str, args: Any) -> str:
+    """Build one shell-safe command string for `shlex.split` in stdio_session."""
+    cmd = str(command or "").strip()
+    if isinstance(args, list) and args:
+        argv = [cmd] + [str(x) for x in args]
+        return shlex.join(argv)
+    return cmd
+
+
+def _entries_from_config(raw: Dict[str, Any]) -> List[McpServerEntry]:
+    """
+    Supports:
+    - **servers**: MeowOne list of { name, command, description?, cwd?, args? }
+    - **mcpServers**: Cursor / IDE style map name -> { command, args?, env?, ... }
+    """
+    out: List[McpServerEntry] = []
+    seen: set[str] = set()
+
+    servers = raw.get("servers")
+    if isinstance(servers, list):
+        for s in servers:
+            if not isinstance(s, dict):
+                continue
+            name = str(s.get("name") or "").strip()
+            cmd = _command_from_parts(str(s.get("command") or ""), s.get("args"))
+            if not name or not cmd:
+                continue
+            cwd = s.get("cwd")
+            desc = str(s.get("description") or "")
+            if name in seen:
+                continue
+            seen.add(name)
+            out.append(
+                McpServerEntry(
+                    name=name,
+                    command=cmd,
+                    cwd=str(cwd).strip() if cwd else None,
+                    description=desc,
+                )
+            )
+
+    mcp_servers = raw.get("mcpServers")
+    if isinstance(mcp_servers, dict):
+        for key, cfg in mcp_servers.items():
+            name = str(key).strip()
+            if not name or name in seen:
+                continue
+            if not isinstance(cfg, dict):
+                continue
+            cmd = _command_from_parts(str(cfg.get("command") or ""), cfg.get("args"))
+            if not cmd:
+                continue
+            cwd = cfg.get("cwd")
+            desc = str(cfg.get("description") or "")
+            seen.add(name)
+            out.append(
+                McpServerEntry(
+                    name=name,
+                    command=cmd,
+                    cwd=str(cwd).strip() if cwd else None,
+                    description=desc,
+                )
+            )
+
+    return out
+
+
+def load_mcp_servers() -> List[McpServerEntry]:
+    jp = mcp_json_path()
+    if jp.is_file():
+        try:
+            raw = json.loads(jp.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(raw, dict):
+            return []
+        return _entries_from_config(raw)
+    yp = mcp_yaml_path()
+    if yp.is_file():
+        raw = yaml.safe_load(yp.read_text(encoding="utf-8")) or {}
+        if not isinstance(raw, dict):
+            return []
+        return _entries_from_config(raw)
+    return []
+
+
+def get_server_by_name(name: str) -> Optional[McpServerEntry]:
+    for s in load_mcp_servers():
+        if s.name == name:
+            return s
+    return None

@@ -12,7 +12,7 @@ from app.loop.events import (
     ThinkingEvent, DeltaEvent, CardEvent, ToolCallEvent,
     ToolResultEvent, ErrorEvent, DoneEvent, LoopEvent,
 )
-from app.loop.context import LoopContext
+from app.loop.context import LoopContext, UserContent
 from app.capability.registry import CapabilityRegistry
 from app.llm.client import chat_completion_stream
 from app.llm.prompts import build_system_prompt
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 async def run_loop(
-    user_message: str,
+    user_message: UserContent,
     history: List[Dict[str, Any]],
     capabilities: CapabilityRegistry,
     message_id: Optional[str] = None,
@@ -45,7 +45,7 @@ async def run_loop(
         extra_system=build_extra_system_prompt(),
     )
     context = LoopContext(system_prompt, history)
-    context.add_user_message(user_message)
+    context.add_user_message(user_message)  # str or multimodal parts
 
     tools = capabilities.to_openai_tools() if capabilities.list_all() else None
 

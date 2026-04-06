@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 from app.capability.tool_base import BaseTool
 from app.mcp.stdio_session import list_tools_for_command
-from app.mcp.yaml_config import load_mcp_servers
+from app.mcp.mcp_config import load_mcp_servers
 from app.paths import repo_root
 
 
@@ -15,7 +15,7 @@ class ListMcpToolsTool(BaseTool):
     name = "list_mcp_tools"
     display_name = "List MCP tools"
     description = (
-        "List tools exposed by configured MCP servers (stdio), from `.meowone/mcp.yaml`. "
+        "List tools exposed by configured MCP servers (stdio), from `.meowone/mcp.json` (or legacy `mcp.yaml`). "
         "Optional `server` filters to one server name."
     )
     permission = "standard"
@@ -36,7 +36,7 @@ class ListMcpToolsTool(BaseTool):
         filt = str(params.get("server") or "").strip()
         servers = load_mcp_servers()
         if not servers:
-            return "No MCP servers configured (.meowone/mcp.yaml)."
+            return "No MCP servers configured (.meowone/mcp.json)."
         out: Dict[str, Any] = {}
         for s in servers:
             if filt and s.name != filt:

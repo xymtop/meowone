@@ -1,17 +1,32 @@
 from __future__ import annotations
 from pydantic import BaseModel
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, List
+
+
+class Attachment(BaseModel):
+    """Binary attachment as base64 (image or small text file)."""
+
+    name: str = ""
+    mime: str = "application/octet-stream"
+    data: str = ""  # base64
 
 
 class ChatRequest(BaseModel):
-    content: str
+    content: str = ""
     type: str = "text"
+    attachments: Optional[List[Attachment]] = None
 
 
 class CardActionRequest(BaseModel):
     cardId: str
     actionId: str
     payload: Dict[str, Any] = {}
+
+
+class A2UIActionRequest(BaseModel):
+    """客户端 @a2ui-sdk/react 派发的 ActionPayload（surfaceId / name / context 等）。"""
+
+    action: Dict[str, Any]
 
 
 class MessageResponse(BaseModel):

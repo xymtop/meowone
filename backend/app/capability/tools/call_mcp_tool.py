@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 from app.capability.tool_base import BaseTool
 from app.mcp.stdio_session import call_tool
-from app.mcp.yaml_config import get_server_by_name
+from app.mcp.mcp_config import get_server_by_name
 from app.paths import repo_root
 
 
@@ -27,7 +27,7 @@ class CallMcpToolTool(BaseTool):
         "properties": {
             "server": {
                 "type": "string",
-                "description": "MCP server name from .meowone/mcp.yaml",
+                "description": "MCP server name from .meowone/mcp.json",
             },
             "tool": {
                 "type": "string",

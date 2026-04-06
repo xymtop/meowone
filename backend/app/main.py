@@ -14,6 +14,7 @@ from app.db.database import init_db
 from app.api.sessions import router as sessions_router
 from app.api.messages import router as messages_router
 from app.api.chat import router as chat_router
+from app.api.meowone_config import router as meowone_config_router
 from app.capability.registry import registry
 from app.config_loaders import invalidate_config_cache
 from app.capability.tools.bash_tool import BashTool
@@ -25,6 +26,7 @@ from app.capability.tools.read_workspace_file import ReadWorkspaceFileTool
 from app.capability.tools.remote_a2a_agent import RemoteA2AAgentCapability
 from app.capability.tools.subagent_tool import SubagentSchedulerTool
 from app.capability.tools.write_workspace_file import WriteWorkspaceFileTool
+from app.capability.tools.load_agent_skill import LoadAgentSkillTool
 from app.agents_config import load_remote_agents
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,7 @@ async def lifespan(app: FastAPI):
     registry.register(ListMcpToolsTool())
     registry.register(CallMcpToolTool())
     registry.register(SubagentSchedulerTool())
+    registry.register(LoadAgentSkillTool())
     agents = load_remote_agents()
     logger.info("已从 agents 配置加载 %s 个远程 A2A 工具", len(agents))
     for agent in agents:
@@ -68,6 +71,7 @@ app.add_middleware(
 app.include_router(sessions_router)
 app.include_router(messages_router)
 app.include_router(chat_router)
+app.include_router(meowone_config_router)
 
 
 @app.get("/health")

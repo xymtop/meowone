@@ -1,8 +1,13 @@
 from __future__ import annotations
+import base64
 import json
-from fastapi import APIRouter
+from typing import Any, Dict, List
+
+from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
-from app.models.message import ChatRequest, CardActionRequest
+
+from app.loop.context import UserContent
+from app.models.message import A2UIActionRequest, ChatRequest, CardActionRequest
 from app.services import message_service
 from app.loop.runtime import run_loop
 from app.loop.events import (
@@ -19,6 +24,52 @@ from app.capability.registry import registry
 router = APIRouter(tags=["chat"])
 
 
+def _display_content_for_db(body: ChatRequest) -> str:
+    base = (body.content or "").strip()
+    n = len(body.attachments or [])
+    if n:
+        suffix = f"\n\n[{n} attachment(s)]" if base else f"[{n} attachment(s)]"
+        return (base + suffix).strip()
+    return base
+
+
+def build_user_content(body: ChatRequest) -> UserContent:
+    """OpenAI-compatible user message: str or multimodal parts."""
+    atts = body.attachments or []
+    if not atts:
+        return body.content or ""
+    parts: List[Dict[str, Any]] = []
+    if (body.content or "").strip():
+        parts.append({"type": "text", "text": body.content})
+    for att in atts:
+        mime = (att.mime or "application/octet-stream").strip()
+        name = att.name or "attachment"
+        if mime.startswith("image/") and att.data:
+            parts.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{att.data}"},
+                }
+            )
+        elif att.data:
+            try:
+                raw = base64.b64decode(att.data, validate=False)
+            except Exception:
+                raw = b""
+            snippet = raw.decode("utf-8", errors="replace")[:12000]
+            parts.append(
+                {
+                    "type": "text",
+                    "text": f"\n\n--- File: {name} ({mime}) ---\n{snippet}",
+                }
+            )
+    if not parts:
+        return body.content or ""
+    if len(parts) == 1 and parts[0].get("type") == "text":
+        return parts[0].get("text") or ""
+    return parts
+
+
 async def _build_history(session_id: str, exclude_content: str):
     history_rows = await message_service.get_context_messages(session_id, limit=20)
     history = []
@@ -30,8 +81,8 @@ async def _build_history(session_id: str, exclude_content: str):
     return history
 
 
-async def _stream_loop(session_id: str, user_content: str):
-    history = await _build_history(session_id, exclude_content=user_content)
+async def _stream_loop(session_id: str, user_content: UserContent, exclude_for_history: str):
+    history = await _build_history(session_id, exclude_content=exclude_for_history)
 
     accumulated_text = ""
     cards = []
@@ -119,13 +170,17 @@ async def _stream_loop(session_id: str, user_content: str):
 
 @router.post("/api/sessions/{session_id}/chat")
 async def chat(session_id: str, body: ChatRequest):
+    if not (body.content or "").strip() and not (body.attachments or []):
+        raise HTTPException(status_code=400, detail="empty message")
+    display = _display_content_for_db(body)
+    user_payload = build_user_content(body)
     await message_service.create_message(
         session_id=session_id,
         role="user",
         content_type="text",
-        content=body.content,
+        content=display or None,
     )
-    return EventSourceResponse(_stream_loop(session_id, body.content))
+    return EventSourceResponse(_stream_loop(session_id, user_payload, display))
 
 
 @router.post("/api/sessions/{session_id}/card-action")
@@ -140,4 +195,17 @@ async def card_action(session_id: str, body: CardActionRequest):
         content_type="text",
         content=action_content,
     )
-    return EventSourceResponse(_stream_loop(session_id, action_content))
+    return EventSourceResponse(_stream_loop(session_id, action_content, action_content))
+
+
+@router.post("/api/sessions/{session_id}/a2ui-action")
+async def a2ui_action(session_id: str, body: A2UIActionRequest):
+    """与 card-action 相同：写入一条用户消息并跑 Agent Loop（SSE）。"""
+    action_content = f"[A2UI Action] {json.dumps(body.action, ensure_ascii=False)}"
+    await message_service.create_message(
+        session_id=session_id,
+        role="user",
+        content_type="text",
+        content=action_content,
+    )
+    return EventSourceResponse(_stream_loop(session_id, action_content, action_content))

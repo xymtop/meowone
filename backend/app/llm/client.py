@@ -14,16 +14,28 @@ MOCK_RESPONSES = {
 }
 
 
+def _last_user_text_lower(messages: List[Dict[str, Any]]) -> str:
+    for m in reversed(messages):
+        if m.get("role") != "user":
+            continue
+        c = m.get("content")
+        if isinstance(c, str):
+            return c.lower()
+        if isinstance(c, list):
+            parts: List[str] = []
+            for p in c:
+                if isinstance(p, dict) and p.get("type") == "text":
+                    parts.append(str(p.get("text", "")))
+            return " ".join(parts).lower()
+    return ""
+
+
 async def _mock_stream(
     messages: List[Dict[str, Any]],
     tools: Optional[List[Dict[str, Any]]] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
     """Mock LLM for demo/testing when API is unavailable."""
-    user_msg = ""
-    for m in reversed(messages):
-        if m.get("role") == "user":
-            user_msg = m.get("content", "").lower()
-            break
+    user_msg = _last_user_text_lower(messages)
 
     has_tool_result = any(m.get("role") == "tool" for m in messages)
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
+
+UserContent = Union[str, List[Dict[str, Any]]]
 
 
 class LoopContext:
@@ -16,7 +18,7 @@ class LoopContext:
                 "content": msg.get("content", ""),
             })
 
-    def add_user_message(self, content: str) -> None:
+    def add_user_message(self, content: UserContent) -> None:
         self.messages.append({"role": "user", "content": content})
 
     def add_assistant_message(self, content: str) -> None:
