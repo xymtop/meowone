@@ -20,6 +20,16 @@ CREATE TABLE IF NOT EXISTS sessions (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS channel_sessions (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    external_thread_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(channel_id, external_thread_id)
+);
+
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -43,6 +53,9 @@ CREATE TABLE IF NOT EXISTS loop_logs (
     duration_ms INTEGER,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_channel_sessions_session_id
+ON channel_sessions (session_id);
 """
 
 _INSERT_DEFAULT_USER = "INSERT OR IGNORE INTO users (id, username) VALUES ('default', 'user');"

@@ -4,16 +4,15 @@ import json
 import logging
 import time
 import uuid
-from typing import AsyncIterator, Optional, List, Dict, Any
+from typing import AsyncIterator, List, Dict, Any
 
 from app.capability.tool_base import ToolExecutionResult
-from app.config_loaders import build_extra_system_prompt
 from app.loop.events import (
     ThinkingEvent, DeltaEvent, CardEvent, ToolCallEvent,
     ToolResultEvent, ErrorEvent, DoneEvent, LoopEvent,
 )
-from app.loop.context import LoopContext, UserContent
-from app.capability.registry import CapabilityRegistry
+from app.loop.context import LoopContext
+from app.loop.input import LoopRunInput
 from app.llm.client import chat_completion_stream
 from app.llm.prompts import build_system_prompt
 from app.config import LOOP_MAX_ROUNDS, LOOP_MAX_TOOL_PHASES, LOOP_TIMEOUT_SECONDS
@@ -23,18 +22,15 @@ logger = logging.getLogger(__name__)
 
 
 async def run_loop(
-    user_message: UserContent,
-    history: List[Dict[str, Any]],
-    capabilities: CapabilityRegistry,
-    message_id: Optional[str] = None,
+    loop_input: LoopRunInput,
 ) -> AsyncIterator[LoopEvent]:
     """Run the Agent Loop. Yields LoopEvent objects.
 
     This is the heart of MeowOne: a pure async generator
     with no dependency on FastAPI or any web framework.
     """
-    if not message_id:
-        message_id = str(uuid.uuid4())
+    message_id = loop_input.message_id or str(uuid.uuid4())
+    capabilities = loop_input.capabilities
 
     start_time = time.time()
     round_num = 0
@@ -42,17 +38,29 @@ async def run_loop(
 
     system_prompt = build_system_prompt(
         capabilities.to_descriptions(),
-        extra_system=build_extra_system_prompt(),
+        extra_system=loop_input.extra_system,
     )
-    context = LoopContext(system_prompt, history)
-    context.add_user_message(user_message)  # str or multimodal parts
+    context = LoopContext(system_prompt, loop_input.history)
+    context.add_user_message(loop_input.user_message)  # str or multimodal parts
 
     tools = capabilities.to_openai_tools() if capabilities.list_all() else None
 
-    while round_num < LOOP_MAX_ROUNDS:
+    max_rounds = loop_input.limits.max_rounds if loop_input.limits and loop_input.limits.max_rounds else LOOP_MAX_ROUNDS
+    max_tool_phases = (
+        loop_input.limits.max_tool_phases
+        if loop_input.limits and loop_input.limits.max_tool_phases
+        else LOOP_MAX_TOOL_PHASES
+    )
+    timeout_seconds = (
+        loop_input.limits.timeout_seconds
+        if loop_input.limits and loop_input.limits.timeout_seconds
+        else LOOP_TIMEOUT_SECONDS
+    )
+
+    while round_num < max_rounds:
         round_num += 1
         elapsed = time.time() - start_time
-        if elapsed > LOOP_TIMEOUT_SECONDS:
+        if elapsed > timeout_seconds:
             yield ErrorEvent(code="TIMEOUT", message="Loop execution timed out")
             break
 
@@ -208,11 +216,29 @@ async def run_loop(
                     ):
                         yield CardEvent(message_id=message_id, card=res)
 
+            # Mermaid specialist output should be delivered verbatim to avoid
+            # main-model post-processing that may break strict fenced protocol.
+            if (
+                len(outcomes) == 1
+                and outcomes[0].get("error_code") is None
+                and outcomes[0].get("name") == "mermaid_assistant"
+            ):
+                raw_result = outcomes[0].get("result_str") or ""
+                if raw_result.strip().startswith("```mermaid"):
+                    context.add_assistant_message(raw_result)
+                    yield DeltaEvent(
+                        message_id=message_id,
+                        content=raw_result,
+                        done=False,
+                    )
+                    yield DeltaEvent(message_id=message_id, content="", done=True)
+                    break
+
             tool_phases += 1
-            if tool_phases >= LOOP_MAX_TOOL_PHASES:
+            if tool_phases >= max_tool_phases:
                 logger.info(
-                    "Stopping agent loop: LOOP_MAX_TOOL_PHASES=%s reached (no further tool rounds).",
-                    LOOP_MAX_TOOL_PHASES,
+                    "Stopping agent loop: max_tool_phases=%s reached (no further tool rounds).",
+                    max_tool_phases,
                 )
                 break
 

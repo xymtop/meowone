@@ -15,18 +15,30 @@ class ChatRequest(BaseModel):
     content: str = ""
     type: str = "text"
     attachments: Optional[List[Attachment]] = None
+    channel_id: Optional[str] = None
+    max_rounds: Optional[int] = None
+    max_tool_phases: Optional[int] = None
+    timeout_seconds: Optional[int] = None
 
 
 class CardActionRequest(BaseModel):
     cardId: str
     actionId: str
     payload: Dict[str, Any] = {}
+    channel_id: Optional[str] = None
+    max_rounds: Optional[int] = None
+    max_tool_phases: Optional[int] = None
+    timeout_seconds: Optional[int] = None
 
 
 class A2UIActionRequest(BaseModel):
     """客户端 @a2ui-sdk/react 派发的 ActionPayload（surfaceId / name / context 等）。"""
 
     action: Dict[str, Any]
+    channel_id: Optional[str] = None
+    max_rounds: Optional[int] = None
+    max_tool_phases: Optional[int] = None
+    timeout_seconds: Optional[int] = None
 
 
 class MessageResponse(BaseModel):

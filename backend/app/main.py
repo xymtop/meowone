@@ -14,6 +14,8 @@ from app.db.database import init_db
 from app.api.sessions import router as sessions_router
 from app.api.messages import router as messages_router
 from app.api.chat import router as chat_router
+from app.api.gateway import router as gateway_router
+from app.api.openai import router as openai_router
 from app.api.meowone_config import router as meowone_config_router
 from app.capability.registry import registry
 from app.config_loaders import invalidate_config_cache
@@ -71,6 +73,8 @@ app.add_middleware(
 app.include_router(sessions_router)
 app.include_router(messages_router)
 app.include_router(chat_router)
+app.include_router(gateway_router)
+app.include_router(openai_router)
 app.include_router(meowone_config_router)
 
 

@@ -1,0 +1,176 @@
+from __future__ import annotations
+
+import json
+from typing import Any, AsyncIterator, Dict, List
+
+from app.capability.registry import CapabilityRegistry
+from app.capability.runtime import CapabilityFilter, CapabilityRuntime
+from app.config_loaders import build_extra_system_prompt, load_channels_config
+from app.loop.context import UserContent
+from app.loop.events import (
+    CardEvent,
+    DeltaEvent,
+    DoneEvent,
+    ErrorEvent,
+    LoopEvent,
+    ThinkingEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
+from app.loop.input import LoopRunInput
+from app.loop.input import LoopLimits
+from app.loop.runtime import run_loop
+from app.services import message_service
+
+
+class ConversationTurnService:
+    """Application service: one user turn -> loop stream -> persistence."""
+
+    def __init__(self, capabilities: CapabilityRegistry) -> None:
+        self.capabilities = capabilities
+        self.capability_runtime = CapabilityRuntime(capabilities)
+
+    async def _build_history(self, session_id: str, exclude_content: str) -> List[Dict[str, Any]]:
+        history_rows = await message_service.get_context_messages(session_id, limit=20)
+        history: List[Dict[str, Any]] = []
+        for row in history_rows:
+            if row["role"] in ("user", "assistant") and row["content"]:
+                history.append({"role": row["role"], "content": row["content"]})
+        if history and history[-1]["content"] == exclude_content:
+            history = history[:-1]
+        return history
+
+    async def stream_turn(
+        self,
+        session_id: str,
+        user_content: UserContent,
+        exclude_for_history: str,
+        *,
+        channel_id: str = "web",
+        capability_filter: CapabilityFilter | None = None,
+        limits: LoopLimits | None = None,
+    ) -> AsyncIterator[Dict[str, str]]:
+        history = await self._build_history(session_id, exclude_content=exclude_for_history)
+        effective_filter = capability_filter
+        if effective_filter is None:
+            by_channel = load_channels_config().get(channel_id) or {}
+            allow = by_channel.get("allow_tools") or None
+            deny = by_channel.get("deny_tools") or None
+            if allow or deny:
+                effective_filter = CapabilityFilter(allow_names=allow, deny_names=deny)
+        selected_caps = self.capability_runtime.resolve(
+            filter=effective_filter,
+            channel_id=channel_id,
+        )
+        run_input = LoopRunInput(
+            user_message=user_content,
+            history=history,
+            capabilities=selected_caps,
+            extra_system=build_extra_system_prompt(),
+            limits=limits,
+        )
+
+        accumulated_text = ""
+        cards: List[Dict[str, Any]] = []
+
+        async for event in run_loop(run_input):
+            payload = await self._to_sse_payload(
+                session_id=session_id,
+                event=event,
+                accumulated_text_ref={"value": accumulated_text},
+                cards=cards,
+            )
+            if isinstance(event, DeltaEvent) and event.content:
+                accumulated_text += event.content
+            if payload is not None:
+                yield payload
+
+    async def _to_sse_payload(
+        self,
+        session_id: str,
+        event: LoopEvent,
+        accumulated_text_ref: Dict[str, str],
+        cards: List[Dict[str, Any]],
+    ) -> Dict[str, str] | None:
+        if isinstance(event, ThinkingEvent):
+            return {
+                "event": "thinking",
+                "data": json.dumps({"step": event.step, "description": event.description}),
+            }
+        if isinstance(event, DeltaEvent):
+            return {
+                "event": "delta",
+                "data": json.dumps(
+                    {
+                        "messageId": event.message_id,
+                        "content": event.content,
+                        "done": event.done,
+                    }
+                ),
+            }
+        if isinstance(event, CardEvent):
+            cards.append(event.card)
+            return {
+                "event": "card",
+                "data": json.dumps(
+                    {
+                        "messageId": event.message_id,
+                        "card": event.card,
+                    }
+                ),
+            }
+        if isinstance(event, ToolCallEvent):
+            return {
+                "event": "tool_call",
+                "data": json.dumps(
+                    {
+                        "toolCallId": event.tool_call_id,
+                        "name": event.capability_name,
+                    }
+                ),
+            }
+        if isinstance(event, ToolResultEvent):
+            return {
+                "event": "tool_result",
+                "data": json.dumps(
+                    {
+                        "toolCallId": event.tool_call_id,
+                        "name": event.capability_name,
+                        "ok": event.success,
+                    }
+                ),
+            }
+        if isinstance(event, ErrorEvent):
+            return {
+                "event": "error",
+                "data": json.dumps({"code": event.code, "message": event.message}),
+            }
+        if isinstance(event, DoneEvent):
+            accumulated_text = accumulated_text_ref["value"]
+            if accumulated_text or cards:
+                card_data = None
+                content_type = "text"
+                if cards:
+                    content_type = "card" if len(cards) == 1 else "cards"
+                    card_data = json.dumps(cards[0] if len(cards) == 1 else cards, ensure_ascii=False)
+
+                await message_service.create_message(
+                    session_id=session_id,
+                    role="assistant",
+                    content_type=content_type,
+                    content=accumulated_text if accumulated_text else None,
+                    card_data=card_data,
+                )
+
+            return {
+                "event": "done",
+                "data": json.dumps(
+                    {
+                        "messageId": event.message_id,
+                        "loopRounds": event.loop_rounds,
+                        "totalDuration": event.total_duration,
+                    }
+                ),
+            }
+        return None
+

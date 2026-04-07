@@ -224,6 +224,7 @@ def invalidate_config_cache() -> None:
     load_agent_skills_metadata_prompt.cache_clear()
     load_context_markdown.cache_clear()
     load_mcp_servers_text.cache_clear()
+    load_channels_config.cache_clear()
 
 
 def build_extra_system_prompt() -> str:
@@ -238,3 +239,33 @@ def build_extra_system_prompt() -> str:
     if mcp:
         chunks.append("## MCP\n\n" + mcp)
     return "\n\n".join(chunks) if chunks else ""
+
+
+@lru_cache(maxsize=1)
+def load_channels_config() -> Dict[str, Dict[str, List[str]]]:
+    """Load optional channel capability filters from `.meowone/channels.yaml`."""
+    p = _config_root() / "channels.yaml"
+    if not p.is_file():
+        return {}
+    try:
+        raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except Exception as e:
+        logger.warning("channels.yaml invalid: %s", e)
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    channels = raw.get("channels")
+    if not isinstance(channels, dict):
+        return {}
+
+    out: Dict[str, Dict[str, List[str]]] = {}
+    for channel_id, cfg in channels.items():
+        if not isinstance(channel_id, str) or not isinstance(cfg, dict):
+            continue
+        allow = cfg.get("allow_tools") or []
+        deny = cfg.get("deny_tools") or []
+        out[channel_id] = {
+            "allow_tools": [str(x) for x in allow if isinstance(x, str)],
+            "deny_tools": [str(x) for x in deny if isinstance(x, str)],
+        }
+    return out
