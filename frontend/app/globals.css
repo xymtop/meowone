@@ -133,3 +133,29 @@
 [data-slot="select-content"] {
   z-index: 300;
 }
+
+/* ByteMD viewer polish inside chat bubbles */
+.markdown-body .bytemd {
+  border: 0;
+  background: transparent;
+}
+
+.markdown-body .bytemd-preview {
+  padding: 0;
+  font-size: 0.97rem;
+  line-height: 1.75;
+}
+
+.markdown-body .bytemd-preview pre {
+  overflow-x: auto;
+  border-radius: 0.85rem;
+  border: 1px solid color-mix(in oklch, var(--border) 85%, transparent);
+  background: color-mix(in oklch, var(--muted) 65%, black 35%);
+  padding: 0.9rem 1rem;
+}
+
+.markdown-body .bytemd-preview code:not(pre code) {
+  border-radius: 0.4rem;
+  background: color-mix(in oklch, var(--muted) 72%, transparent);
+  padding: 0.08rem 0.35rem;
+}
