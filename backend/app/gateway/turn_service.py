@@ -5,7 +5,7 @@ from typing import Any, AsyncIterator, Dict, List
 
 from app.capability.registry import CapabilityRegistry
 from app.capability.runtime import CapabilityFilter, CapabilityRuntime
-from app.config_loaders import build_extra_system_prompt, load_channels_config
+from app.config_loaders import build_extra_system_prompt, load_channels_config, load_scheduler_config
 from app.loop.context import UserContent
 from app.loop.events import (
     CardEvent,
@@ -19,7 +19,9 @@ from app.loop.events import (
 )
 from app.loop.input import LoopRunInput
 from app.loop.input import LoopLimits
-from app.loop.runtime import run_loop
+from app.scheduler.executor import execute_scheduled_turn
+from app.scheduler.planner import build_execution_plan
+from app.scheduler.registry import scheduler_registry
 from app.services import message_service
 
 
@@ -47,6 +49,8 @@ class ConversationTurnService:
         exclude_for_history: str,
         *,
         channel_id: str = "web",
+        scheduler_mode: str | None = None,
+        task_tag: str | None = None,
         capability_filter: CapabilityFilter | None = None,
         limits: LoopLimits | None = None,
     ) -> AsyncIterator[Dict[str, str]]:
@@ -58,22 +62,70 @@ class ConversationTurnService:
             deny = by_channel.get("deny_tools") or None
             if allow or deny:
                 effective_filter = CapabilityFilter(allow_names=allow, deny_names=deny)
+        scheduler_cfg = load_scheduler_config()
+        requested_mode = (scheduler_mode or "").strip()
+        if not requested_mode and task_tag:
+            by_task_tag = (
+                (scheduler_cfg.get("routing") or {}).get("by_task_tag") or {}
+                if isinstance(scheduler_cfg, dict)
+                else {}
+            )
+            if isinstance(by_task_tag, dict):
+                requested_mode = str(by_task_tag.get(task_tag) or "").strip()
+        if not requested_mode:
+            by_channel_mode = (
+                (scheduler_cfg.get("routing") or {}).get("by_channel") or {}
+                if isinstance(scheduler_cfg, dict)
+                else {}
+            )
+            if isinstance(by_channel_mode, dict):
+                requested_mode = str(by_channel_mode.get(channel_id) or "").strip()
+            if not requested_mode:
+                requested_mode = str(scheduler_cfg.get("default_mode") or "direct").strip()
+        schedule = scheduler_registry.decide(requested_mode)
+        execution_plan = build_execution_plan(mode=schedule.mode, task_tag=task_tag)
+        if schedule.capability_filter:
+            base_allow = list(effective_filter.allow_names) if effective_filter and effective_filter.allow_names else []
+            base_deny = list(effective_filter.deny_names) if effective_filter and effective_filter.deny_names else []
+            mode_allow = list(schedule.capability_filter.allow_names or [])
+            mode_deny = list(schedule.capability_filter.deny_names or [])
+            merged_allow = base_allow or mode_allow or None
+            merged_deny = list(dict.fromkeys(base_deny + mode_deny)) or None
+            effective_filter = CapabilityFilter(allow_names=merged_allow, deny_names=merged_deny)
         selected_caps = self.capability_runtime.resolve(
             filter=effective_filter,
             channel_id=channel_id,
         )
+        extra_system = build_extra_system_prompt()
+        if schedule.system_hint:
+            extra_system = (extra_system + "\n\n" + schedule.system_hint).strip()
+        yield {
+            "event": "thinking",
+            "data": json.dumps(
+                {
+                    "step": 0,
+                    "description": f"Scheduler selected: {schedule.mode}",
+                    "schedulerMode": schedule.mode,
+                    "executionPlan": execution_plan.to_event_payload(),
+                }
+            ),
+        }
         run_input = LoopRunInput(
             user_message=user_content,
             history=history,
             capabilities=selected_caps,
-            extra_system=build_extra_system_prompt(),
+            extra_system=extra_system,
             limits=limits,
         )
 
         accumulated_text = ""
         cards: List[Dict[str, Any]] = []
 
-        async for event in run_loop(run_input):
+        async for event in execute_scheduled_turn(
+            mode=schedule.mode,
+            run_input=run_input,
+            task_tag=task_tag,
+        ):
             payload = await self._to_sse_payload(
                 session_id=session_id,
                 event=event,

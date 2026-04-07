@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from app.config import MEOWONE_CONFIG_DIR
+from app.services.mcp_service import list_mcp_servers_sync
 
 
 def _repo_root() -> Path:
@@ -106,6 +107,19 @@ def _entries_from_config(raw: Dict[str, Any]) -> List[McpServerEntry]:
 
 
 def load_mcp_servers() -> List[McpServerEntry]:
+    db_rows = list_mcp_servers_sync(enabled_only=True)
+    if db_rows:
+        out: List[McpServerEntry] = []
+        for row in db_rows:
+            out.append(
+                McpServerEntry(
+                    name=str(row.get("name") or ""),
+                    command=str(row.get("command") or ""),
+                    cwd=str(row.get("cwd") or "").strip() or None,
+                    description=str(row.get("description") or ""),
+                )
+            )
+        return out
     jp = mcp_json_path()
     if jp.is_file():
         try:

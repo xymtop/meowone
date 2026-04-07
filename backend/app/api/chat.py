@@ -6,13 +6,12 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.gateway.adapters.web_sse import stream_web_sse_turn
 from app.models.message import A2UIActionRequest, ChatRequest, CardActionRequest
-from app.gateway.turn_service import ConversationTurnService
+from app.core.runtime_container import runtime_container
 from app.services import message_service
-from app.capability.registry import registry
 from app.sdk.core import build_user_content, make_display_content, safe_limits
 
 router = APIRouter(tags=["chat"])
-turn_service = ConversationTurnService(capabilities=registry)
+turn_service = runtime_container.turn_service
 
 
 @router.post("/api/sessions/{session_id}/chat")
@@ -34,6 +33,8 @@ async def chat(session_id: str, body: ChatRequest):
             user_content=user_payload,
             exclude_for_history=display,
             channel_id=body.channel_id or "web",
+            scheduler_mode=body.scheduler_mode,
+            task_tag=body.task_tag,
             limits=safe_limits(body.max_rounds, body.max_tool_phases, body.timeout_seconds),
         )
     )
@@ -58,6 +59,8 @@ async def card_action(session_id: str, body: CardActionRequest):
             user_content=action_content,
             exclude_for_history=action_content,
             channel_id=body.channel_id or "web",
+            scheduler_mode=body.scheduler_mode,
+            task_tag=body.task_tag,
             limits=safe_limits(body.max_rounds, body.max_tool_phases, body.timeout_seconds),
         )
     )
@@ -80,6 +83,8 @@ async def a2ui_action(session_id: str, body: A2UIActionRequest):
             user_content=action_content,
             exclude_for_history=action_content,
             channel_id=body.channel_id or "web",
+            scheduler_mode=body.scheduler_mode,
+            task_tag=body.task_tag,
             limits=safe_limits(body.max_rounds, body.max_tool_phases, body.timeout_seconds),
         )
     )

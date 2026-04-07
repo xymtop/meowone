@@ -1,0 +1,16 @@
+default_mode: direct
+modes:
+  direct:
+    enabled: true
+  master_slave:
+    enabled: true
+  swarm:
+    enabled: true
+routing:
+  by_channel:
+    web: direct
+    feishu: master_slave
+    openai: direct
+  by_task_tag:
+    research: swarm
+    execution: master_slave

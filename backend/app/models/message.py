@@ -19,6 +19,8 @@ class ChatRequest(BaseModel):
     max_rounds: Optional[int] = None
     max_tool_phases: Optional[int] = None
     timeout_seconds: Optional[int] = None
+    scheduler_mode: Optional[str] = None
+    task_tag: Optional[str] = None
 
 
 class CardActionRequest(BaseModel):
@@ -29,6 +31,8 @@ class CardActionRequest(BaseModel):
     max_rounds: Optional[int] = None
     max_tool_phases: Optional[int] = None
     timeout_seconds: Optional[int] = None
+    scheduler_mode: Optional[str] = None
+    task_tag: Optional[str] = None
 
 
 class A2UIActionRequest(BaseModel):
@@ -39,6 +43,8 @@ class A2UIActionRequest(BaseModel):
     max_rounds: Optional[int] = None
     max_tool_phases: Optional[int] = None
     timeout_seconds: Optional[int] = None
+    scheduler_mode: Optional[str] = None
+    task_tag: Optional[str] = None
 
 
 class MessageResponse(BaseModel):

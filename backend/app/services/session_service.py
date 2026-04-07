@@ -54,6 +54,8 @@ async def update_session(session_id: str, title: Optional[str] = None) -> Dict[s
 async def delete_session(session_id: str) -> None:
     async with get_db() as db:
         await db.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+        await db.execute("DELETE FROM channel_sessions WHERE session_id = ?", (session_id,))
+        await db.execute("DELETE FROM loop_logs WHERE session_id = ?", (session_id,))
         await db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         await db.commit()
 

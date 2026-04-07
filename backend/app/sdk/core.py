@@ -72,6 +72,8 @@ async def stream_turn_sse(
     user_content: UserContent,
     exclude_for_history: str,
     channel_id: str = "web",
+    scheduler_mode: str | None = None,
+    task_tag: str | None = None,
     limits: LoopLimits | None = None,
 ) -> AsyncIterator[Dict[str, str]]:
     async for item in turn_service.stream_turn(
@@ -79,6 +81,8 @@ async def stream_turn_sse(
         user_content=user_content,
         exclude_for_history=exclude_for_history,
         channel_id=channel_id,
+        scheduler_mode=scheduler_mode,
+        task_tag=task_tag,
         limits=limits,
     ):
         yield item

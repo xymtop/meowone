@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query
 from sse_starlette.sse import EventSourceResponse
 
+from app.core.runtime_container import runtime_container
 from app.gateway.adapters.web_sse import stream_web_sse_turn
-from app.gateway.turn_service import ConversationTurnService
 from app.models.gateway import GatewayTurnRequest
 from app.sdk.core import build_user_content, make_display_content, safe_limits
+from app.services import log_stream_service
 from app.services import message_service
 from app.services.channel_session_service import resolve_or_create_session
-from app.capability.registry import registry
 
 router = APIRouter(prefix="/api/gateway", tags=["gateway"])
-turn_service = ConversationTurnService(capabilities=registry)
+turn_service = runtime_container.turn_service
 
 
 @router.post("/turn")
@@ -47,7 +49,18 @@ async def gateway_turn(body: GatewayTurnRequest):
             user_content=user_payload,
             exclude_for_history=display,
             channel_id=body.channel_id,
+            scheduler_mode=body.scheduler_mode,
+            task_tag=body.task_tag,
             limits=safe_limits(body.max_rounds, body.max_tool_phases, body.timeout_seconds),
         )
     )
+
+
+@router.get("/logs")
+async def query_gateway_logs(
+    session_id: Optional[str] = Query(default=None),
+    cursor: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    return log_stream_service.query_logs(session_id=session_id, cursor=cursor, limit=limit)
 

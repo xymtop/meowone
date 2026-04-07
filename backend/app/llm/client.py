@@ -4,9 +4,10 @@ import httpx
 import json
 import uuid
 from typing import AsyncIterator, Optional, List, Dict, Any
-from app.config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
+from app.services.model_service import resolve_model_sync
 
-MOCK_MODE = LLM_API_KEY in ("", "sk-mock", "mock")
+def _is_mock_mode(api_key: str) -> bool:
+    return api_key in ("", "sk-mock", "mock")
 
 MOCK_RESPONSES = {
     "default": "你好！我是 MeowOne，你的 AI 操作系统助手。我可以通过对话帮你完成各种任务。有什么我可以帮你的吗？",
@@ -135,19 +136,24 @@ async def chat_completion_stream(
     """Stream chat completion from OpenAI-compatible API.
     Falls back to mock mode when API is unavailable.
     """
-    if MOCK_MODE:
+    model_cfg = resolve_model_sync(model)
+    base_url = str(model_cfg.get("base_url") or "").rstrip("/")
+    api_key = str(model_cfg.get("api_key") or "")
+    model_name = str(model_cfg.get("name") or model or "")
+
+    if _is_mock_mode(api_key) or not base_url:
         async for chunk in _mock_stream(messages, tools):
             yield chunk
         return
 
-    url = f"{LLM_BASE_URL}/chat/completions"
+    url = f"{base_url}/chat/completions"
     headers = {
-        "Authorization": f"Bearer {LLM_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
     payload: Dict[str, Any] = {
-        "model": model or LLM_MODEL,
+        "model": model_name,
         "messages": messages,
         "stream": True,
     }

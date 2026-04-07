@@ -1,5 +1,5 @@
 from __future__ import annotations
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from typing import List
 from app.models.session import SessionCreate, SessionUpdate, SessionResponse
 from app.services import session_service
@@ -19,12 +19,18 @@ async def list_sessions():
 
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(session_id: str):
-    return await session_service.get_session(session_id)
+    try:
+        return await session_service.get_session(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.patch("/{session_id}", response_model=SessionResponse)
 async def update_session(session_id: str, body: SessionUpdate):
-    return await session_service.update_session(session_id, body.title)
+    try:
+        return await session_service.update_session(session_id, body.title)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.delete("/{session_id}")

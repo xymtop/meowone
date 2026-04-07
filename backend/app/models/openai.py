@@ -13,6 +13,8 @@ class OpenAIChatCompletionsRequest(BaseModel):
     max_rounds: Optional[int] = None
     max_tool_phases: Optional[int] = None
     timeout_seconds: Optional[int] = None
+    scheduler_mode: Optional[str] = None
+    task_tag: Optional[str] = None
 
 
 def last_user_content(messages: List[Dict[str, Any]]) -> Union[str, List[Dict[str, Any]]]:

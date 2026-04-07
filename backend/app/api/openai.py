@@ -7,9 +7,8 @@ import time
 from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
-from app.capability.registry import registry
 from app.config import LLM_MODEL
-from app.gateway.turn_service import ConversationTurnService
+from app.core.runtime_container import runtime_container
 from app.models.openai import OpenAIChatCompletionsRequest, last_user_content
 from app.sdk.core import (
     make_display_content,
@@ -21,7 +20,7 @@ from app.services import message_service
 from app.services.channel_session_service import resolve_or_create_session
 
 router = APIRouter(prefix="/v1", tags=["openai"])
-turn_service = ConversationTurnService(capabilities=registry)
+turn_service = runtime_container.turn_service
 
 
 @router.post("/chat/completions")
@@ -67,6 +66,8 @@ async def chat_completions(body: OpenAIChatCompletionsRequest):
         user_content=user_content,
         exclude_for_history=display,
         channel_id=channel_id,
+        scheduler_mode=body.scheduler_mode,
+        task_tag=body.task_tag,
         limits=safe_limits(body.max_rounds, body.max_tool_phases, body.timeout_seconds),
     )
     model_name = body.model or LLM_MODEL

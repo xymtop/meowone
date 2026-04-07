@@ -12,6 +12,7 @@ import yaml
 
 from app.config import MEOWONE_CONFIG_DIR, MAX_CONTEXT_CHARS, MAX_SKILLS_CHARS
 from app.mcp.mcp_config import load_mcp_servers
+from app.services.skill_service import list_skills_sync
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,24 @@ def scan_agent_skills() -> Tuple[AgentSkillInfo, ...]:
     Discover skills: `.meowone/skills/<skill-dir>/SKILL.md` with YAML frontmatter.
     See https://agentskills.io/specification — `name` should match the parent directory name.
     """
+    db_skills = list_skills_sync(enabled_only=True)
+    if db_skills:
+        root = _config_root() / "skills"
+        out: List[AgentSkillInfo] = []
+        for item in db_skills:
+            name = str(item.get("name") or "").strip()
+            if not name:
+                continue
+            desc = str(item.get("description") or "").strip()
+            out.append(
+                AgentSkillInfo(
+                    dirname=name,
+                    name=name,
+                    description=desc,
+                    skill_md_path=str((root / name / "SKILL.md").resolve()),
+                )
+            )
+        return tuple(out)
     skills_root = _config_root() / "skills"
     out: List[AgentSkillInfo] = []
     if not skills_root.is_dir():
@@ -88,18 +107,6 @@ def scan_agent_skills() -> Tuple[AgentSkillInfo, ...]:
         dirname = skill_dir.name
         sid = str(fm.get("name") or dirname).strip()
         desc = str(fm.get("description") or "").strip()
-        if not desc:
-            logger.warning(
-                "skill %s: missing `description` in frontmatter (spec requires it)",
-                sk_file,
-            )
-        if sid != dirname:
-            logger.warning(
-                "skill %s: frontmatter name %r should match directory %r per Agent Skills spec",
-                sk_file,
-                sid,
-                dirname,
-            )
         out.append(
             AgentSkillInfo(
                 dirname=dirname,
@@ -126,9 +133,16 @@ def format_skill_activation_for_model(info: AgentSkillInfo) -> str:
     """
     Full SKILL.md content for tool result (activation), so the body enters the loop as tool output.
     """
-    path = Path(info.skill_md_path)
-    raw = path.read_text(encoding="utf-8")
-    fm, body = _parse_skill_md(raw)
+    body = ""
+    db_skills = list_skills_sync(enabled_only=True)
+    for item in db_skills:
+        if str(item.get("name") or "").strip() == info.name:
+            body = str(item.get("body") or "").strip()
+            break
+    if not body:
+        path = Path(info.skill_md_path)
+        raw = path.read_text(encoding="utf-8")
+        _fm, body = _parse_skill_md(raw)
     lines = [
         f"# Agent skill activated: `{info.name}`",
         "",
@@ -224,6 +238,7 @@ def invalidate_config_cache() -> None:
     load_agent_skills_metadata_prompt.cache_clear()
     load_context_markdown.cache_clear()
     load_mcp_servers_text.cache_clear()
+    load_scheduler_config.cache_clear()
     load_channels_config.cache_clear()
 
 
@@ -239,6 +254,20 @@ def build_extra_system_prompt() -> str:
     if mcp:
         chunks.append("## MCP\n\n" + mcp)
     return "\n\n".join(chunks) if chunks else ""
+
+
+@lru_cache(maxsize=1)
+def load_scheduler_config() -> Dict[str, Any]:
+    """Load optional scheduler routing from `.meowone/scheduler.yaml`."""
+    p = _config_root() / "scheduler.yaml"
+    if not p.is_file():
+        return {}
+    try:
+        raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except Exception as e:
+        logger.warning("scheduler.yaml invalid: %s", e)
+        return {}
+    return raw if isinstance(raw, dict) else {}
 
 
 @lru_cache(maxsize=1)
