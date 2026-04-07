@@ -199,6 +199,61 @@ function normalizeTextProps(props: Record<string, unknown>): Record<string, unkn
   return out;
 }
 
+function normalizeButtonProps(props: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...props };
+  const rawAction = out.action;
+  if (rawAction && typeof rawAction === "object" && !Array.isArray(rawAction)) {
+    const a = { ...(rawAction as Record<string, unknown>) };
+    const name = String(a.name ?? a.type ?? "button.click");
+    let context = a.context;
+
+    // Common model output: { action: { name, arguments: {...} } } or payload/data.
+    // A2UI v0.8 expects `context` to be an iterable array of { key, value }.
+    if (!Array.isArray(context)) {
+      const obj =
+        (a.arguments as Record<string, unknown>) ??
+        (a.payload as Record<string, unknown>) ??
+        (a.data as Record<string, unknown>) ??
+        null;
+      if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+        context = Object.entries(obj).map(([k, v]) => ({
+          key: k,
+          value: ensureValueSourceField(v),
+        }));
+      } else {
+        context = [];
+      }
+    } else {
+      context = context
+        .map((item) => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+          const e = item as Record<string, unknown>;
+          const key = String(e.key ?? e.name ?? "");
+          if (!key) return null;
+          return { key, value: ensureValueSourceField(e.value) };
+        })
+        .filter(Boolean);
+    }
+
+    out.action = { name, context };
+  }
+
+  if (out.label !== undefined) {
+    out.label = ensureValueSourceField(out.label);
+    return out;
+  }
+
+  const candidate = out.text ?? out.title ?? out.name ?? out.value;
+  if (
+    candidate !== undefined &&
+    candidate !== null &&
+    (typeof candidate === "string" || typeof candidate === "number" || typeof candidate === "boolean")
+  ) {
+    out.label = ensureValueSourceField(candidate);
+  }
+  return out;
+}
+
 /** 兜底：任意组件里常见的 ValueSource 字段若仍是原始类型，统一包一层 */
 function sanitizeGenericComponentProps(props: Record<string, unknown>): Record<string, unknown> {
   const out = { ...props };
@@ -261,6 +316,8 @@ function normalizeComponentProps(def: ComponentDefinition): ComponentDefinition 
     nextProps = normalizeMultipleChoiceProps(props);
   } else if (typeName === "Text") {
     nextProps = normalizeTextProps(props);
+  } else if (typeName === "Button") {
+    nextProps = normalizeButtonProps(props);
   } else if (typeName === "CheckBox") {
     const p = { ...props };
     if (p.label !== undefined) p.label = ensureValueSourceField(p.label);

@@ -40,18 +40,103 @@ export function MarkdownContent({
   embedA2UI = true,
 }: MarkdownContentProps) {
   const plugins = useMemo(
-    () => [
-      frontmatter(),
-      gfm(),
-      breaks(),
-      footnotes(),
-      gemoji(),
-      math(),
-      highlight(),
-      mermaid(),
-      importHtml(),
-      mediumZoom(),
-    ],
+    () => {
+      const darkByClass =
+        typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+      const darkBySystem =
+        typeof window !== "undefined" &&
+        window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
+      const isDark = darkByClass || darkBySystem;
+
+      return [
+        frontmatter(),
+        gfm(),
+        breaks(),
+        footnotes(),
+        gemoji(),
+        math(),
+        highlight(),
+        mermaid({
+          startOnLoad: false,
+          theme: isDark ? "dark" : "default",
+          look: "classic",
+          securityLevel: "loose",
+          fontFamily: "var(--font-geist-sans), Inter, Arial, sans-serif",
+          logLevel: "fatal",
+          themeVariables: isDark
+            ? {
+                primaryColor: "#1f2937",
+                primaryTextColor: "#f9fafb",
+                primaryBorderColor: "#4b5563",
+                lineColor: "#9ca3af",
+                secondaryColor: "#111827",
+                tertiaryColor: "#0f172a",
+                background: "#111827",
+                mainBkg: "#1f2937",
+                secondBkg: "#111827",
+                tertiaryBkg: "#0f172a",
+                textColor: "#f3f4f6",
+                clusterBkg: "#1f2937",
+                clusterBorder: "#6b7280",
+                edgeLabelBackground: "#111827",
+                actorBkg: "#1f2937",
+                actorBorder: "#6b7280",
+                actorTextColor: "#f9fafb",
+                noteBkgColor: "#1e293b",
+                noteTextColor: "#f8fafc",
+              }
+            : {
+                primaryColor: "#f3f4f6",
+                primaryTextColor: "#111827",
+                primaryBorderColor: "#9ca3af",
+                lineColor: "#6b7280",
+                secondaryColor: "#ffffff",
+                tertiaryColor: "#f9fafb",
+                background: "#ffffff",
+                mainBkg: "#f3f4f6",
+                secondBkg: "#ffffff",
+                tertiaryBkg: "#f9fafb",
+                textColor: "#111827",
+                clusterBkg: "#f3f4f6",
+                clusterBorder: "#9ca3af",
+                edgeLabelBackground: "#ffffff",
+                actorBkg: "#f3f4f6",
+                actorBorder: "#9ca3af",
+                actorTextColor: "#111827",
+                noteBkgColor: "#eff6ff",
+                noteTextColor: "#1e293b",
+              },
+          flowchart: {
+            htmlLabels: true,
+            useMaxWidth: true,
+            curve: "basis",
+          },
+          sequence: {
+            showSequenceNumbers: true,
+            useMaxWidth: true,
+            wrap: true,
+          },
+          gantt: {
+            axisFormat: "%m/%d",
+          },
+          journey: {
+            useMaxWidth: true,
+          },
+          pie: {
+            useMaxWidth: true,
+            textPosition: 0.75,
+          },
+          er: {
+            useMaxWidth: true,
+          },
+          state: {
+            useMaxWidth: true,
+          },
+        }),
+        importHtml(),
+        mediumZoom(),
+      ];
+    },
     [],
   );
 
