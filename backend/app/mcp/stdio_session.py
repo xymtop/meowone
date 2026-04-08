@@ -95,6 +95,9 @@ class McpStdioSession:
     async def tools_list(self) -> Dict[str, Any]:
         return await self._request("tools/list", {})
 
+    async def resources_list(self) -> Dict[str, Any]:
+        return await self._request("resources/list", {})
+
     async def tools_call(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         return await self._request(
             "tools/call",
@@ -105,6 +108,11 @@ class McpStdioSession:
 async def list_tools_for_command(command: str, cwd: Optional[Path] = None) -> Dict[str, Any]:
     async with McpStdioSession(command, cwd=cwd) as sess:
         return await sess.tools_list()
+
+
+async def list_resources_for_command(command: str, cwd: Optional[Path] = None) -> Dict[str, Any]:
+    async with McpStdioSession(command, cwd=cwd) as sess:
+        return await sess.resources_list()
 
 
 async def call_tool(command: str, tool_name: str, arguments: Dict[str, Any], cwd: Optional[Path] = None) -> Dict[str, Any]:

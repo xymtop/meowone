@@ -23,3 +23,7 @@ MAX_SKILLS_CHARS = int(os.getenv("MAX_SKILLS_CHARS", "8000"))
 # Sandbox: bash / file tools default to repository root
 WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", "")
 MEOWONE_ALLOW_BASH = os.getenv("MEOWONE_ALLOW_BASH", "0").lower() in ("1", "true", "yes")
+
+# E2B Cloud Sandbox (可选，需要安装 e2b-code-interpreter)
+E2B_API_KEY = os.getenv("E2B_API_KEY", "")
+E2B_TIMEOUT_SECONDS = int(os.getenv("E2B_TIMEOUT_SECONDS", "120"))

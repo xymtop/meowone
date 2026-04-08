@@ -28,4 +28,6 @@ class LoopRunInput:
     extra_system: str = ""
     message_id: Optional[str] = None
     limits: Optional[LoopLimits] = None
+    """Resolved model name (matches rows in models table / OpenAI model id)."""
+    model: Optional[str] = None
 

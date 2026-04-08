@@ -53,6 +53,10 @@ export type ChatStreamInput = {
   scheduler_mode?: string;
   agent_name?: string;
   agent_type?: string;
+  /** 数据库主键，优先于 agent_name */
+  agent_id?: string;
+  /** 仅默认智能体：用户选择的模型名 */
+  model_name?: string;
 };
 
 export type A2UIActionInput = {
@@ -62,6 +66,10 @@ export type A2UIActionInput = {
   max_tool_phases?: number;
   timeout_seconds?: number;
   scheduler_mode?: string;
+  agent_name?: string;
+  agent_type?: string;
+  agent_id?: string;
+  model_name?: string;
 };
 
 type StreamOptions = {
@@ -77,6 +85,34 @@ export type McpListResponse = { count: number; servers: Record<string, unknown>[
 export type SkillsListResponse = {
   count: number;
   skills: { name: string; description: string; enabled?: number }[];
+};
+
+export type SkillFsFile = {
+  path: string;
+  name: string;
+  size: number;
+  is_directory: boolean;
+  file_type: string;
+};
+
+export type SkillFsDetail = {
+  name: string;
+  description?: string;
+  category?: string;
+  files?: SkillFsFile[];
+  [key: string]: unknown;
+};
+
+export type McpToolsResponse = {
+  name: string;
+  tools: { name: string; description?: string; inputSchema?: unknown }[];
+  error?: string;
+};
+
+export type McpResourcesResponse = {
+  name: string;
+  resources: { uri: string; name: string; description?: string; mimeType?: string }[];
+  error?: string | null;
 };
 
 export type PromptItem = {
@@ -96,6 +132,8 @@ export type PromptsListResponse = {
 export type AgentsListResponse = { count: number; agents: Record<string, unknown>[] };
 
 export type InternalAgentsListResponse = { count: number; agents: Record<string, unknown>[] };
+
+export type AgentDetailResponse = Record<string, unknown>;
 
 export type ScheduledTasksListResponse = { count: number; tasks: Record<string, unknown>[] };
 
@@ -208,6 +246,8 @@ export const meowoneApi = {
         scheduler_mode: input.scheduler_mode,
         agent_name: input.agent_name,
         agent_type: input.agent_type,
+        agent_id: input.agent_id,
+        model_name: input.model_name,
       },
       onEvent,
       options,
@@ -228,6 +268,10 @@ export const meowoneApi = {
         max_tool_phases: input.max_tool_phases,
         timeout_seconds: input.timeout_seconds,
         scheduler_mode: input.scheduler_mode,
+        agent_name: input.agent_name,
+        agent_type: input.agent_type,
+        agent_id: input.agent_id,
+        model_name: input.model_name,
       },
       onEvent,
       options,
@@ -287,6 +331,10 @@ export const meowoneApi = {
       `/api/capabilities/mcp/${encodeURIComponent(name)}`,
       { method: "DELETE" },
     ),
+  getMcpTools: (name: string) =>
+    request<McpToolsResponse>(`/api/capabilities/mcp/${encodeURIComponent(name)}/tools`),
+  getMcpResources: (name: string) =>
+    request<McpResourcesResponse>(`/api/capabilities/mcp/${encodeURIComponent(name)}/resources`),
 
   listSkills: () => request<SkillsListResponse>("/api/capabilities/skills"),
   upsertSkill: (body: Record<string, unknown>) =>
@@ -298,6 +346,24 @@ export const meowoneApi = {
     request<{ ok: boolean; deleted: boolean }>(
       `/api/capabilities/skills/${encodeURIComponent(name)}`,
       { method: "DELETE" },
+    ),
+
+  listSkillsFs: () => request<{ count: number; skills: SkillFsDetail[] }>("/api/capabilities/skills/fs"),
+  getSkillFs: (name: string) =>
+    request<{ found: boolean; skill: SkillFsDetail }>(
+      `/api/capabilities/skills/fs/${encodeURIComponent(name)}`,
+    ),
+  readSkillFile: (skillName: string, filePath: string) =>
+    request<{ name: string; file_path: string; content: string }>(
+      `/api/capabilities/skills/fs/${encodeURIComponent(skillName)}/files/${encodeURIComponent(filePath)}`,
+    ),
+  updateSkillFile: (skillName: string, filePath: string, content: string) =>
+    request<{ ok: boolean; name: string; file_path: string }>(
+      `/api/capabilities/skills/fs/${encodeURIComponent(skillName)}/files`,
+      {
+        method: "POST",
+        body: JSON.stringify({ file_path: filePath, content }),
+      },
     ),
 
   listPrompts: (enabledOnly?: boolean) =>
@@ -350,6 +416,10 @@ export const meowoneApi = {
     request<{ ok: boolean; deleted: boolean }>(
       `/api/agents/${encodeURIComponent(agentType)}/${encodeURIComponent(name)}`,
       { method: "DELETE" },
+    ),
+  getAgentDetail: (agentType: string, name: string) =>
+    request<AgentDetailResponse>(
+      `/api/agents/${encodeURIComponent(agentType)}/${encodeURIComponent(name)}`,
     ),
 
   listInternalAgentsRuntime: () => request<InternalAgentsListResponse>("/api/internal-agents"),

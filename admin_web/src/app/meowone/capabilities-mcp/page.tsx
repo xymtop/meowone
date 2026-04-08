@@ -53,6 +53,30 @@ function TrashIcon() {
   );
 }
 
+function InfoIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.02M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
+function ToolDetailIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0" />
+    </svg>
+  );
+}
+
 // ============ 类型定义 ============
 type McpServer = {
   name: string;
@@ -60,6 +84,18 @@ type McpServer = {
   description?: string;
   cwd?: string;
   env?: Record<string, string>;
+  transport?: "stdio" | "sse" | "streamable-http";
+  url?: string;
+  auth_type?: "none" | "bearer" | "api-key";
+  auth_token?: string;
+};
+
+type TransportType = "stdio" | "sse" | "streamable-http";
+
+type McpTool = {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
 };
 
 export default function CapabilitiesMcpPage() {
@@ -67,12 +103,26 @@ export default function CapabilitiesMcpPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
-  
+
+  // MCP 详情弹窗
+  const [viewingServer, setViewingServer] = useState<McpServer | null>(null);
+  const [serverTools, setServerTools] = useState<McpTool[]>([]);
+  const [serverResources, setServerResources] = useState<
+    { uri: string; name: string; description?: string; mimeType?: string }[]
+  >([]);
+  const [loadingTools, setLoadingTools] = useState(false);
+  const [detailTab, setDetailTab] = useState<"tools" | "resources">("tools");
+  const [mcpDetailError, setMcpDetailError] = useState("");
+
   // 表单状态
   const [name, setName] = useState("");
   const [command, setCommand] = useState("");
   const [description, setDescription] = useState("");
   const [cwd, setCwd] = useState("");
+  const [transport, setTransport] = useState<TransportType>("stdio");
+  const [url, setUrl] = useState("");
+  const [authType, setAuthType] = useState<"none" | "bearer" | "api-key">("none");
+  const [authToken, setAuthToken] = useState("");
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -97,6 +147,10 @@ export default function CapabilitiesMcpPage() {
     setCommand("");
     setDescription("");
     setCwd("");
+    setTransport("stdio");
+    setUrl("");
+    setAuthType("none");
+    setAuthToken("");
   };
 
   const handleSubmit = async () => {
@@ -104,8 +158,12 @@ export default function CapabilitiesMcpPage() {
       setError("请输入 MCP 服务名称");
       return;
     }
-    if (!command.trim()) {
+    if (transport === "stdio" && !command.trim()) {
       setError("请输入启动命令");
+      return;
+    }
+    if ((transport === "sse" || transport === "streamable-http") && !url.trim()) {
+      setError("请输入远程服务地址");
       return;
     }
 
@@ -114,9 +172,13 @@ export default function CapabilitiesMcpPage() {
       setError("");
       await meowoneApi.upsertMcp({
         name: name.trim(),
-        command: command.trim(),
+        command: transport === "stdio" ? command.trim() : null,
         description: description.trim(),
         cwd: cwd.trim() || null,
+        transport,
+        url: url.trim() || null,
+        auth_type: authType,
+        auth_token: authToken.trim() || null,
       });
       resetForm();
       setShowForm(false);
@@ -138,28 +200,37 @@ export default function CapabilitiesMcpPage() {
     }
   };
 
+  // 查看 MCP 服务详情
+  const handleViewDetails = async (server: McpServer) => {
+    setViewingServer(server);
+    setServerTools([]);
+    setServerResources([]);
+    setMcpDetailError("");
+    setDetailTab("tools");
+    setLoadingTools(true);
+    try {
+      const [toolsRes, resRes] = await Promise.all([
+        meowoneApi.getMcpTools(server.name),
+        meowoneApi.getMcpResources(server.name),
+      ]);
+      setServerTools(toolsRes.tools || []);
+      setServerResources(resRes.resources || []);
+      const err = [toolsRes.error, resRes.error].filter(Boolean).join("；");
+      if (err) setMcpDetailError(err);
+    } catch (e) {
+      setMcpDetailError((e as Error).message);
+    } finally {
+      setLoadingTools(false);
+    }
+  };
+
   const servers = data?.servers || [];
 
   // 常见 MCP 服务示例
   const popularServices = [
-    {
-      name: "Filesystem",
-      command: "npx",
-      args: "-y @modelcontextprotocol/server-filesystem",
-      description: "访问本地文件系统",
-    },
-    {
-      name: "Brave Search",
-      command: "npx",
-      args: "-y @modelcontextprotocol/server-brave-search",
-      description: "网页搜索能力",
-    },
-    {
-      name: "GitHub",
-      command: "npx",
-      args: "-y @modelcontextprotocol/server-github",
-      description: "GitHub API 集成",
-    },
+    { name: "Filesystem", command: "npx", args: "-y @modelcontextprotocol/server-filesystem", description: "访问本地文件系统" },
+    { name: "Brave Search", command: "npx", args: "-y @modelcontextprotocol/server-brave-search", description: "网页搜索能力" },
+    { name: "GitHub", command: "npx", args: "-y @modelcontextprotocol/server-github", description: "GitHub API 集成" },
   ];
 
   return (
@@ -171,15 +242,10 @@ export default function CapabilitiesMcpPage() {
           <p className="mt-1 text-sm text-gray-500">Model Context Protocol - 数据源和外部服务连接</p>
         </div>
         <button
-          onClick={() => {
-            resetForm();
-            setShowForm(!showForm);
-          }}
+          onClick={() => { resetForm(); setShowForm(!showForm); }}
           className={cn(
             "inline-flex items-center gap-2 rounded-xl px-5 py-2.5 font-medium transition-all",
-            showForm
-              ? "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-              : "bg-gradient-to-r from-purple-500 to-pink-600 text-white hover:from-purple-600 hover:to-pink-700"
+            showForm ? "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50" : "bg-gradient-to-r from-purple-500 to-pink-600 text-white hover:from-purple-600 hover:to-pink-700"
           )}
         >
           {showForm ? "取消" : <><PlusIcon /> 添加 MCP 服务</>}
@@ -197,19 +263,14 @@ export default function CapabilitiesMcpPage() {
       {showForm && (
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="mb-4 text-lg font-semibold text-gray-900">添加 MCP 服务</h3>
-          
-          {/* 快速模板 */}
+
           <div className="mb-4">
-            <p className="mb-2 text-sm text-gray-500">快速添加常用服务：</p>
+            <p className="mb-2 text-sm text-gray-500">快速添加常用服务（STDIO）：</p>
             <div className="flex flex-wrap gap-2">
               {popularServices.map((service) => (
                 <button
                   key={service.name}
-                  onClick={() => {
-                    setName(service.name);
-                    setCommand(`${service.command} ${service.args}`);
-                    setDescription(service.description);
-                  }}
+                  onClick={() => { setName(service.name); setCommand(`${service.command} ${service.args}`); setDescription(service.description); setTransport("stdio"); }}
                   className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-sm text-gray-600 transition-colors hover:border-purple-300 hover:bg-purple-50 hover:text-purple-600"
                 >
                   {service.name}
@@ -221,67 +282,73 @@ export default function CapabilitiesMcpPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  服务名称 *
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="例如：filesystem、github"
-                  className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                />
+                <label className="mb-1 block text-sm font-medium text-gray-700">服务名称 *</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：filesystem、github"
+                  className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  启动命令 *
-                </label>
-                <input
-                  type="text"
-                  value={command}
-                  onChange={(e) => setCommand(e.target.value)}
-                  placeholder="npx -y @modelcontextprotocol/server-filesystem"
-                  className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                />
+                <label className="mb-1 block text-sm font-medium text-gray-700">传输方式 *</label>
+                <select value={transport} onChange={(e) => setTransport(e.target.value as TransportType)}
+                  className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20">
+                  <option value="stdio">本地进程 (STDIO)</option>
+                  <option value="sse">远程服务 (SSE + HTTP POST)</option>
+                  <option value="streamable-http">远程服务 (Streamable HTTP)</option>
+                </select>
               </div>
             </div>
+
+            {transport === "stdio" && (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">启动命令 *</label>
+                  <input type="text" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="npx -y @modelcontextprotocol/server-filesystem"
+                    className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">工作目录（可选）</label>
+                  <input type="text" value={cwd} onChange={(e) => setCwd(e.target.value)} placeholder="MCP 服务运行的工作目录"
+                    className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                </div>
+              </div>
+            )}
+
+            {(transport === "sse" || transport === "streamable-http") && (
+              <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">服务地址 (URL) *</label>
+                  <input type="text" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp-server.example.com/mcp"
+                    className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700">认证方式</label>
+                    <select value={authType} onChange={(e) => setAuthType(e.target.value as "none" | "bearer" | "api-key")}
+                      className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20">
+                      <option value="none">无认证</option>
+                      <option value="bearer">Bearer Token</option>
+                      <option value="api-key">API Key</option>
+                    </select>
+                  </div>
+                  {authType !== "none" && (
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">认证令牌</label>
+                      <input type="password" value={authToken} onChange={(e) => setAuthToken(e.target.value)} placeholder={authType === "bearer" ? "Bearer token..." : "API key..."}
+                        className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                描述
-              </label>
-              <input
-                type="text"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="这个 MCP 服务提供什么能力"
-                className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                工作目录（可选）
-              </label>
-              <input
-                type="text"
-                value={cwd}
-                onChange={(e) => setCwd(e.target.value)}
-                placeholder="MCP 服务运行的工作目录"
-                className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-              />
+              <label className="mb-1 block text-sm font-medium text-gray-700">描述</label>
+              <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="这个 MCP 服务提供什么能力"
+                className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20" />
             </div>
           </div>
           <div className="mt-6 flex justify-end gap-3">
-            <button
-              onClick={() => setShowForm(false)}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-            >
-              取消
-            </button>
-            <button
-              onClick={() => void handleSubmit()}
-              disabled={saving}
-              className="rounded-lg bg-purple-500 px-4 py-2 text-sm font-medium text-white hover:bg-purple-600 disabled:opacity-50"
-            >
+            <button onClick={() => setShowForm(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">取消</button>
+            <button onClick={() => void handleSubmit()} disabled={saving} className="rounded-lg bg-purple-500 px-4 py-2 text-sm font-medium text-white hover:bg-purple-600 disabled:opacity-50">
               {saving ? "保存中..." : "保存"}
             </button>
           </div>
@@ -305,30 +372,18 @@ export default function CapabilitiesMcpPage() {
                 <PlugIcon />
               </div>
               <h3 className="mt-4 text-lg font-medium text-gray-900">还没有配置 MCP 服务</h3>
-              <p className="mt-2 text-sm text-gray-500">
-                MCP 服务可以为智能体提供访问外部数据和工具的能力
-              </p>
-              <button
-                onClick={() => {
-                  resetForm();
-                  setShowForm(true);
-                }}
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-3 font-medium text-white transition-all hover:from-purple-600 hover:to-pink-700"
-              >
-                <PlusIcon />
-                添加第一个 MCP 服务
+              <p className="mt-2 text-sm text-gray-500">MCP 服务可以为智能体提供访问外部数据和工具的能力</p>
+              <button onClick={() => { resetForm(); setShowForm(true); }}
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 px-6 py-3 font-medium text-white transition-all hover:from-purple-600 hover:to-pink-700">
+                <PlusIcon /> 添加第一个 MCP 服务
               </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {servers.map((server) => {
                 const s = server as McpServer;
-
                 return (
-                  <div
-                    key={s.name}
-                    className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white transition-all hover:border-purple-300 hover:shadow-lg"
-                  >
+                  <div key={s.name} className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-white transition-all hover:border-purple-300 hover:shadow-lg">
                     <div className="p-5">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
@@ -337,40 +392,30 @@ export default function CapabilitiesMcpPage() {
                           </div>
                           <div>
                             <h3 className="font-semibold text-gray-900">{s.name}</h3>
-                            <p className="mt-0.5 text-sm text-gray-500">MCP 服务</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                s.transport === "stdio" ? "bg-green-100 text-green-700" : s.transport === "sse" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"
+                              }`}>
+                                {s.transport === "stdio" ? "本地进程" : s.transport === "sse" ? "SSE" : "Streamable"}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                        <button
-                          onClick={() => void handleDelete(s.name)}
-                          className="flex items-center justify-center rounded-lg p-1.5 text-gray-400 opacity-0 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-                        >
+                        <button onClick={() => void handleDelete(s.name)}
+                          className="flex items-center justify-center rounded-lg p-1.5 text-gray-400 opacity-0 transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500 group-hover:opacity-100">
                           <TrashIcon />
                         </button>
                       </div>
 
-                      {/* 描述 */}
-                      {s.description && (
-                        <p className="mt-3 text-sm text-gray-600">{s.description}</p>
-                      )}
+                      {s.description && <p className="mt-3 text-sm text-gray-600">{s.description}</p>}
 
-                      {/* 命令 */}
-                      <div className="mt-4 rounded-lg bg-gray-50 p-3">
-                        <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
-                          <TerminalIcon />
-                          启动命令
-                        </div>
-                        <code className="block truncate font-mono text-xs text-gray-700">
-                          {s.command}
-                        </code>
+                      {/* 操作按钮 */}
+                      <div className="mt-4 flex items-center gap-2">
+                        <button onClick={() => void handleViewDetails(s)}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition-colors hover:border-purple-300 hover:bg-purple-50 hover:text-purple-600">
+                          <InfoIcon /> 查看详情
+                        </button>
                       </div>
-
-                      {/* 工作目录 */}
-                      {s.cwd && (
-                        <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
-                          <FolderIcon />
-                          <span className="truncate">{s.cwd}</span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 );
@@ -380,13 +425,205 @@ export default function CapabilitiesMcpPage() {
         </>
       )}
 
+      {/* MCP 服务详情弹窗 */}
+      {viewingServer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex w-full max-w-3xl max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+            {/* 弹窗头部 */}
+            <div className="flex items-center justify-between border-b p-6">
+              <div className="flex items-center gap-3">
+                <div className="flex size-12 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                  <DatabaseIcon />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">{viewingServer.name}</h2>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      viewingServer.transport === "stdio" ? "bg-green-100 text-green-700" : viewingServer.transport === "sse" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"
+                    }`}>
+                      {viewingServer.transport === "stdio" ? "本地进程 (STDIO)" : viewingServer.transport === "sse" ? "SSE + HTTP" : "Streamable HTTP"}
+                    </span>
+                    {viewingServer.description && <span className="text-sm text-gray-500">{viewingServer.description}</span>}
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setViewingServer(null)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <CloseIcon />
+              </button>
+            </div>
+
+            {/* 弹窗内容 */}
+            <div className="flex flex-1 overflow-hidden">
+              {/* 左侧：配置信息 */}
+              <div className="w-72 border-r p-4 overflow-y-auto">
+                <h3 className="mb-4 text-sm font-medium text-gray-700">配置信息</h3>
+                <div className="space-y-4">
+                  {viewingServer.transport === "stdio" && viewingServer.command && (
+                    <div className="rounded-lg bg-gray-50 p-3">
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                        <TerminalIcon /> 启动命令
+                      </div>
+                      <code className="block font-mono text-xs text-gray-700 whitespace-pre-wrap break-all">{viewingServer.command}</code>
+                    </div>
+                  )}
+                  {(viewingServer.transport === "sse" || viewingServer.transport === "streamable-http") && viewingServer.url && (
+                    <div className="rounded-lg bg-blue-50 p-3">
+                      <div className="flex items-center gap-2 text-xs text-blue-600 mb-2">
+                        <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0 3-4.03 3-9s-1.343-9-3-9" /></svg>
+                        远程地址
+                      </div>
+                      <code className="block font-mono text-xs text-gray-700 break-all">{viewingServer.url}</code>
+                      {viewingServer.auth_type && viewingServer.auth_type !== "none" && (
+                        <div className="mt-2 flex items-center gap-1 text-xs text-blue-600">
+                          <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                          {viewingServer.auth_type === "bearer" ? "Bearer Token" : "API Key"}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {viewingServer.cwd && (
+                    <div className="rounded-lg bg-gray-50 p-3">
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                        <FolderIcon /> 工作目录
+                      </div>
+                      <code className="block font-mono text-xs text-gray-700">{viewingServer.cwd}</code>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 右侧：工具 / 资源 */}
+              <div className="flex flex-1 flex-col overflow-hidden">
+                <div className="flex shrink-0 gap-1 border-b border-gray-100 px-4 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDetailTab("tools")}
+                    className={cn(
+                      "rounded-t-lg px-4 py-2 text-sm font-medium transition-colors",
+                      detailTab === "tools"
+                        ? "border-b-2 border-purple-500 text-purple-700"
+                        : "text-gray-500 hover:text-gray-800",
+                    )}
+                  >
+                    工具 ({serverTools.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDetailTab("resources")}
+                    className={cn(
+                      "rounded-t-lg px-4 py-2 text-sm font-medium transition-colors",
+                      detailTab === "resources"
+                        ? "border-b-2 border-purple-500 text-purple-700"
+                        : "text-gray-500 hover:text-gray-800",
+                    )}
+                  >
+                    资源 ({serverResources.length})
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  {mcpDetailError && (
+                    <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                      {mcpDetailError}
+                    </div>
+                  )}
+                  {loadingTools ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="size-6 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
+                      <span className="ml-2 text-gray-500">连接 MCP 中...</span>
+                    </div>
+                  ) : detailTab === "tools" ? (
+                    serverTools.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                        <ToolDetailIcon />
+                        <p className="mt-2 text-sm">暂无可用工具</p>
+                        <p className="mt-1 text-center text-xs">确认服务已启动，或查看上方错误信息</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {serverTools.map((tool, idx) => (
+                          <div
+                            key={idx}
+                            className="rounded-xl border border-gray-100 bg-gradient-to-br from-white to-gray-50/80 p-4 shadow-sm transition-all hover:border-purple-200 hover:shadow-md"
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+                                <ToolDetailIcon />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h4 className="font-semibold text-gray-900">{tool.name}</h4>
+                                {tool.description && (
+                                  <p className="mt-1 text-sm leading-relaxed text-gray-600">{tool.description}</p>
+                                )}
+                                {tool.inputSchema != null && tool.inputSchema !== "" && (
+                                  <div className="mt-3 rounded-lg border border-gray-100 bg-white p-3">
+                                    <p className="mb-1 text-xs font-medium text-gray-500">参数结构</p>
+                                    <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-mono text-xs text-gray-700">
+                                      {typeof tool.inputSchema === "string"
+                                        ? tool.inputSchema
+                                        : JSON.stringify(tool.inputSchema, null, 2)}
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : serverResources.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                      <FolderIcon />
+                      <p className="mt-2 text-sm">暂无资源或未实现 resources/list</p>
+                      <p className="mt-1 text-center text-xs">部分 MCP 仅提供工具，不提供资源列表</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {serverResources.map((r, idx) => (
+                        <div
+                          key={`${r.uri}-${idx}`}
+                          className="rounded-xl border border-gray-100 bg-gradient-to-br from-white to-slate-50/80 p-4 shadow-sm"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                              <FolderIcon />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-semibold text-gray-900">{r.name || r.uri || "资源"}</h4>
+                              {r.description && (
+                                <p className="mt-1 text-sm text-gray-600">{r.description}</p>
+                              )}
+                              <p className="mt-2 break-all font-mono text-xs text-gray-500">{r.uri}</p>
+                              {r.mimeType && (
+                                <span className="mt-2 inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                                  {r.mimeType}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 弹窗底部 */}
+            <div className="flex items-center justify-end border-t bg-gray-50 p-4">
+              <button onClick={() => setViewingServer(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">关闭</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 提示信息 */}
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
-        <p className="font-medium text-gray-700">💡 关于 MCP</p>
+        <p className="font-medium text-gray-700">关于 MCP</p>
         <ul className="mt-2 space-y-1">
-          <li>• MCP (Model Context Protocol) 是一种让 AI 模型连接外部工具和数据的协议</li>
-          <li>• 添加 MCP 服务后，可以在创建智能体时选择使用</li>
-          <li>• 常用的 MCP 服务包括：文件系统、搜索引擎、GitHub 等</li>
+          <li><strong>STDIO</strong>：本地进程模式，适合本地 MCP 服务</li>
+          <li><strong>SSE</strong>：远程服务模式，通过 Server-Sent Events 通信</li>
+          <li><strong>Streamable HTTP</strong>：远程服务模式，支持双向流式传输</li>
+          <li>添加 MCP 服务后，可以在创建智能体时选择使用</li>
         </ul>
       </div>
     </div>

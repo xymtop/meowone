@@ -46,7 +46,13 @@ class RemoteA2AAgentCapability(BaseTool):
     returns a helpful error so the model can fall back to local tools.
     """
 
-    def __init__(self, name: str, description: str, base_url: str) -> None:
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        base_url: str,
+        auth_token: Optional[str] = None,
+    ) -> None:
         self.name = name
         self.display_name = name
         self.description = description
@@ -54,6 +60,7 @@ class RemoteA2AAgentCapability(BaseTool):
         self.category = "agents"
         self.tags = ("a2a", "remote")
         self.base_url = base_url.rstrip("/")
+        self.auth_token = auth_token
         self.parameters_schema = {
             "type": "object",
             "properties": {
@@ -78,12 +85,16 @@ class RemoteA2AAgentCapability(BaseTool):
             )
 
         timeout = httpx.Timeout(TOOL_TIMEOUT_SECONDS)
-        async with httpx.AsyncClient(timeout=timeout) as http:
+        headers = {}
+        if self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
+        async with httpx.AsyncClient(timeout=timeout, headers=headers) as http:
             logger.info(
-                "A2A 调用开始: tool=%s base_url=%s task_len=%s",
+                "A2A 调用开始: tool=%s base_url=%s task_len=%s auth=%s",
                 self.name,
                 self.base_url,
                 len(text),
+                "yes" if self.auth_token else "no",
             )
             client = await ClientFactory.connect(  # type: ignore[name-defined]
                 self.base_url,

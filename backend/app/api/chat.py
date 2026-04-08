@@ -7,7 +7,7 @@ from sse_starlette.sse import EventSourceResponse
 from app.gateway.adapters.web_sse import stream_web_sse_turn
 from app.models.message import A2UIActionRequest, ChatRequest, CardActionRequest
 from app.core.runtime_container import runtime_container
-from app.services import message_service, session_service
+from app.services import message_service, session_service, agent_service
 from app.sdk.core import build_user_content, make_display_content, safe_limits
 
 router = APIRouter(tags=["chat"])
@@ -27,16 +27,23 @@ async def chat(session_id: str, body: ChatRequest):
         content=display or None,
     )
     
-    # 如果请求中指定了 agent，更新会话的 agent 信息
+    # 优先用 agent_id 解析智能体（与数据库一致）
     agent_name = body.agent_name
     agent_type = body.agent_type or "internal"
+    agent_id = (body.agent_id or "").strip() or None
+    if agent_id:
+        row = await agent_service.get_agent_by_id(agent_id)
+        if row:
+            agent_name = str(row.get("name") or "")
+            agent_type = str(row.get("agent_type") or "internal")
+
     if agent_name:
         await session_service.update_session(
             session_id=session_id,
             agent_name=agent_name,
             agent_type=agent_type,
         )
-    
+
     return EventSourceResponse(
         stream_web_sse_turn(
             turn_service,
@@ -49,6 +56,8 @@ async def chat(session_id: str, body: ChatRequest):
             limits=safe_limits(body.max_rounds, body.max_tool_phases, body.timeout_seconds),
             agent_name=agent_name,
             agent_type=agent_type,
+            agent_id=agent_id,
+            model_name=body.model_name,
         )
     )
 
@@ -65,6 +74,23 @@ async def card_action(session_id: str, body: CardActionRequest):
         content_type="text",
         content=action_content,
     )
+
+    agent_name = body.agent_name
+    agent_type = body.agent_type or "internal"
+    agent_id = (body.agent_id or "").strip() or None
+    if agent_id:
+        row = await agent_service.get_agent_by_id(agent_id)
+        if row:
+            agent_name = str(row.get("name") or "")
+            agent_type = str(row.get("agent_type") or "internal")
+
+    if agent_name:
+        await session_service.update_session(
+            session_id=session_id,
+            agent_name=agent_name,
+            agent_type=agent_type,
+        )
+
     return EventSourceResponse(
         stream_web_sse_turn(
             turn_service,
@@ -75,6 +101,10 @@ async def card_action(session_id: str, body: CardActionRequest):
             scheduler_mode=body.scheduler_mode,
             task_tag=body.task_tag,
             limits=safe_limits(body.max_rounds, body.max_tool_phases, body.timeout_seconds),
+            agent_name=agent_name,
+            agent_type=agent_type,
+            agent_id=agent_id,
+            model_name=body.model_name,
         )
     )
 
@@ -89,6 +119,23 @@ async def a2ui_action(session_id: str, body: A2UIActionRequest):
         content_type="text",
         content=action_content,
     )
+    
+    agent_name = body.agent_name
+    agent_type = body.agent_type or "internal"
+    agent_id = (body.agent_id or "").strip() or None
+    if agent_id:
+        row = await agent_service.get_agent_by_id(agent_id)
+        if row:
+            agent_name = str(row.get("name") or "")
+            agent_type = str(row.get("agent_type") or "internal")
+
+    if agent_name:
+        await session_service.update_session(
+            session_id=session_id,
+            agent_name=agent_name,
+            agent_type=agent_type,
+        )
+
     return EventSourceResponse(
         stream_web_sse_turn(
             turn_service,
@@ -99,5 +146,9 @@ async def a2ui_action(session_id: str, body: A2UIActionRequest):
             scheduler_mode=body.scheduler_mode,
             task_tag=body.task_tag,
             limits=safe_limits(body.max_rounds, body.max_tool_phases, body.timeout_seconds),
+            agent_name=agent_name,
+            agent_type=agent_type,
+            agent_id=agent_id,
+            model_name=body.model_name,
         )
     )

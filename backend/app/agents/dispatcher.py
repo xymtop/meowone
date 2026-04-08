@@ -72,10 +72,12 @@ class AgentDispatcher:
 
     async def _invoke_external_a2a(self, *, plan: AgentRuntimePlan, task: str, base_url: str) -> Dict[str, Any]:
         started = time.perf_counter()
+        auth_token = plan.endpoint.metadata_json.get("auth_token") if plan.endpoint.metadata_json else None
         tool = RemoteA2AAgentCapability(
             name=plan.agent_name,
             description=f"Proxy external agent `{plan.agent_name}`",
             base_url=base_url,
+            auth_token=auth_token,
         )
         try:
             output = await tool.execute({"task": task})

@@ -7,6 +7,7 @@ from app.capability.tools.bash_tool import BashTool
 from app.capability.tools.call_mcp_tool import CallMcpToolTool
 from app.capability.tools.card_builder import CardBuilderCapability
 from app.capability.tools.create_internal_agent import CreateInternalAgentTool
+from app.capability.tools.e2b_sandbox_tool import E2BSandboxTool
 from app.capability.tools.invoke_internal_agent import InvokeInternalAgentTool
 from app.capability.tools.list_internal_agents import ListInternalAgentsTool
 from app.capability.tools.list_mcp_tools import ListMcpToolsTool
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 def register_builtin_capabilities(registry: CapabilityRegistry) -> None:
     registry.register(CardBuilderCapability())
     registry.register(BashTool())
+    registry.register(E2BSandboxTool())  # E2B 云端沙箱
     registry.register(ReadWorkspaceFileTool())
     registry.register(WriteWorkspaceFileTool())
     registry.register(ListWorkspaceDirTool())

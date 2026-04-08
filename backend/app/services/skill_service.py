@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from pathlib import Path
@@ -24,23 +25,64 @@ def _skills_root() -> Path:
     return _config_root() / "skills"
 
 
-def _parse_skill_md(path: Path) -> Dict[str, str]:
+def _parse_skill_md(path: Path) -> Dict[str, Any]:
+    """解析 SKILL.md 文件，返回元数据和正文"""
     raw = path.read_text(encoding="utf-8")
     text = raw.lstrip("\ufeff")
     if not text.startswith("---"):
-        return {"name": path.parent.name, "description": "", "body": text.strip()}
+        return {
+            "name": path.parent.name,
+            "description": "",
+            "body": text.strip(),
+            "trigger_keywords": [],
+            "category": "general",
+            "examples": [],
+            "version": "1.0.0",
+        }
     parts = text.split("---", 2)
     if len(parts) < 3:
-        return {"name": path.parent.name, "description": "", "body": text.strip()}
+        return {
+            "name": path.parent.name,
+            "description": "",
+            "body": text.strip(),
+            "trigger_keywords": [],
+            "category": "general",
+            "examples": [],
+            "version": "1.0.0",
+        }
     fm, body = parts[1], parts[2]
-    name = path.parent.name
-    desc = ""
+
+    result: Dict[str, Any] = {
+        "name": path.parent.name,
+        "description": "",
+        "body": body.strip(),
+        "trigger_keywords": [],
+        "category": "general",
+        "examples": [],
+        "version": "1.0.0",
+    }
+
     for line in fm.splitlines():
-        if line.strip().startswith("name:"):
-            name = line.split(":", 1)[1].strip()
-        elif line.strip().startswith("description:"):
-            desc = line.split(":", 1)[1].strip()
-    return {"name": name, "description": desc, "body": body.strip()}
+        line = line.strip()
+        if line.startswith("name:"):
+            result["name"] = line.split(":", 1)[1].strip()
+        elif line.startswith("description:"):
+            result["description"] = line.split(":", 1)[1].strip()
+        elif line.startswith("trigger_keywords:"):
+            try:
+                keywords_str = line.split(":", 1)[1].strip()
+                if keywords_str.startswith("["):
+                    result["trigger_keywords"] = json.loads(keywords_str)
+                else:
+                    result["trigger_keywords"] = [k.strip() for k in keywords_str.split(",") if k.strip()]
+            except (json.JSONDecodeError, ValueError):
+                pass
+        elif line.startswith("category:"):
+            result["category"] = line.split(":", 1)[1].strip()
+        elif line.startswith("version:"):
+            result["version"] = line.split(":", 1)[1].strip().strip('"').strip("'")
+
+    return result
 
 
 def _sync_from_files_if_empty_sync() -> None:
@@ -69,10 +111,20 @@ def _sync_from_files_if_empty_sync() -> None:
                 continue
             conn.execute(
                 """
-                INSERT OR IGNORE INTO skills (id, name, description, body, enabled, source)
-                VALUES (?, ?, ?, ?, 1, 'file-import')
+                INSERT OR IGNORE INTO skills (id, name, description, body, enabled, source,
+                                               trigger_keywords, category, examples, version)
+                VALUES (?, ?, ?, ?, 1, 'file-import', ?, ?, ?, ?)
                 """,
-                (str(uuid.uuid4()), name, desc, body),
+                (
+                    str(uuid.uuid4()),
+                    name,
+                    desc,
+                    body,
+                    json.dumps(parsed.get("trigger_keywords", [])),
+                    parsed.get("category", "general"),
+                    json.dumps(parsed.get("examples", [])),
+                    parsed.get("version", "1.0.0"),
+                ),
             )
         conn.commit()
     finally:
@@ -84,55 +136,116 @@ def list_skills_sync(enabled_only: bool = True) -> List[Dict[str, Any]]:
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     try:
+        cols = "name, description, body, enabled, trigger_keywords, category, examples, version"
         if enabled_only:
             rows = conn.execute(
-                "SELECT name, description, body FROM skills WHERE enabled = 1 ORDER BY name ASC"
+                f"SELECT {cols} FROM skills WHERE enabled = 1 ORDER BY category, name ASC"
             ).fetchall()
         else:
             rows = conn.execute(
-                "SELECT name, description, body, enabled FROM skills ORDER BY name ASC"
+                f"SELECT {cols} FROM skills ORDER BY category, name ASC"
             ).fetchall()
-        return [dict(r) for r in rows]
+        result = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["trigger_keywords"] = json.loads(d.get("trigger_keywords", "[]"))
+                d["examples"] = json.loads(d.get("examples", "[]"))
+            except (json.JSONDecodeError, TypeError):
+                d["trigger_keywords"] = []
+                d["examples"] = []
+            result.append(d)
+        return result
     finally:
         conn.close()
 
 
 async def list_skills(enabled_only: bool = False) -> List[Dict[str, Any]]:
     async with get_db() as db:
+        cols = "name, description, body, enabled, trigger_keywords, category, examples, version"
         if enabled_only:
             cur = await db.execute(
-                "SELECT name, description, body, enabled FROM skills WHERE enabled = 1 ORDER BY name ASC"
+                f"SELECT {cols} FROM skills WHERE enabled = 1 ORDER BY category, name ASC"
             )
         else:
             cur = await db.execute(
-                "SELECT name, description, body, enabled FROM skills ORDER BY name ASC"
+                f"SELECT {cols} FROM skills ORDER BY category, name ASC"
             )
         rows = await cur.fetchall()
         if rows:
-            return [dict(r) for r in rows]
+            result = []
+            for r in rows:
+                d = dict(r)
+                try:
+                    d["trigger_keywords"] = json.loads(d.get("trigger_keywords", "[]"))
+                    d["examples"] = json.loads(d.get("examples", "[]"))
+                except (json.JSONDecodeError, TypeError):
+                    d["trigger_keywords"] = []
+                    d["examples"] = []
+                result.append(d)
+            return result
     _sync_from_files_if_empty_sync()
     async with get_db() as db:
+        cols = "name, description, body, enabled, trigger_keywords, category, examples, version"
         cur = await db.execute(
-            "SELECT name, description, body, enabled FROM skills ORDER BY name ASC"
+            f"SELECT {cols} FROM skills ORDER BY category, name ASC"
         )
         rows = await cur.fetchall()
-        return [dict(r) for r in rows]
+        result = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["trigger_keywords"] = json.loads(d.get("trigger_keywords", "[]"))
+                d["examples"] = json.loads(d.get("examples", "[]"))
+            except (json.JSONDecodeError, TypeError):
+                d["trigger_keywords"] = []
+                d["examples"] = []
+            result.append(d)
+        return result
 
 
-async def upsert_skill(*, name: str, description: str, body: str = "") -> None:
+async def upsert_skill(
+    *,
+    name: str,
+    description: str,
+    body: str = "",
+    trigger_keywords: List[str] = None,
+    category: str = "general",
+    examples: List[str] = None,
+    version: str = "1.0.0",
+) -> None:
+    if trigger_keywords is None:
+        trigger_keywords = []
+    if examples is None:
+        examples = []
+
     async with get_db() as db:
         await db.execute(
             """
-            INSERT INTO skills (id, name, description, body, enabled, source, updated_at)
-            VALUES (?, ?, ?, ?, 1, 'db', datetime('now'))
+            INSERT INTO skills (id, name, description, body, enabled, source, updated_at,
+                               trigger_keywords, category, examples, version)
+            VALUES (?, ?, ?, ?, 1, 'db', datetime('now'), ?, ?, ?, ?)
             ON CONFLICT(name) DO UPDATE SET
               description=excluded.description,
               body=excluded.body,
               enabled=1,
               source='db',
-              updated_at=datetime('now')
+              updated_at=datetime('now'),
+              trigger_keywords=excluded.trigger_keywords,
+              category=excluded.category,
+              examples=excluded.examples,
+              version=excluded.version
             """,
-            (str(uuid.uuid4()), name, description, body),
+            (
+                str(uuid.uuid4()),
+                name,
+                description,
+                body,
+                json.dumps(trigger_keywords),
+                category,
+                json.dumps(examples),
+                version,
+            ),
         )
         await db.commit()
 

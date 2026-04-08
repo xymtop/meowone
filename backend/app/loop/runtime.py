@@ -75,6 +75,7 @@ async def run_loop(
             async for chunk in chat_completion_stream(
                 messages=context.get_messages(),
                 tools=tools,
+                model=loop_input.model,
             ):
                 if chunk["type"] == "content_delta":
                     has_content = True

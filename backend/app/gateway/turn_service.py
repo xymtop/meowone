@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from app.capability.registry import CapabilityRegistry
 from app.capability.runtime import CapabilityFilter, CapabilityRuntime
@@ -22,8 +22,7 @@ from app.loop.input import LoopLimits
 from app.scheduler.executor import execute_scheduled_turn
 from app.scheduler.planner import build_execution_plan
 from app.scheduler.registry import scheduler_registry
-from app.services import message_service
-from app.db.database import get_db
+from app.services import message_service, prompt_service
 
 
 class ConversationTurnService:
@@ -34,19 +33,34 @@ class ConversationTurnService:
         self.capability_runtime = CapabilityRuntime(capabilities)
 
     async def _load_agent_config(self, agent_name: str, agent_type: str) -> Dict[str, Any] | None:
-        """从数据库加载 agent 配置"""
+        """从数据库加载 agent 配置（含 metadata_json 解析出的 model_name）。"""
+        from app.services import agent_service
+
+        return await agent_service.get_agent(name=agent_name, agent_type=agent_type)
+
+    async def _load_prompt_content(self, prompt_key: str) -> str:
+        """根据 prompt_key 加载提示词内容"""
+        if not prompt_key:
+            return ""
         try:
-            async with get_db() as db:
-                cursor = await db.execute(
-                    "SELECT * FROM agents WHERE name = ? AND agent_type = ?",
-                    (agent_name, agent_type),
-                )
-                row = await cursor.fetchone()
-                if row:
-                    return dict(row)
-                return None
+            prompt = await prompt_service.get_prompt(prompt_key)
+            if prompt and prompt.get("content_md"):
+                return prompt["content_md"]
         except Exception:
-            return None
+            pass
+        return ""
+
+    def _parse_json_list(self, value: Optional[str]) -> List[str]:
+        """解析 JSON 字符串列表"""
+        if not value:
+            return []
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(x) for x in parsed if str(x).strip()]
+        except (json.JSONDecodeError, TypeError):
+            pass
+        return []
 
     async def _build_history(self, session_id: str, exclude_content: str) -> List[Dict[str, Any]]:
         history_rows = await message_service.get_context_messages(session_id, limit=20)
@@ -71,20 +85,92 @@ class ConversationTurnService:
         limits: LoopLimits | None = None,
         agent_name: str | None = None,
         agent_type: str | None = None,
+        agent_id: str | None = None,
+        model_name: str | None = None,
     ) -> AsyncIterator[Dict[str, str]]:
-        # 如果指定了 agent_name，从数据库加载 agent 配置
+        from app.services import agent_service
+
         extra_system = ""
-        if agent_name:
-            agent_cfg = await self._load_agent_config(agent_name, agent_type or "internal")
-            if agent_cfg:
-                # 合并 agent 的 system_prompt 和 prompt_key
-                if agent_cfg.get("system_prompt"):
-                    extra_system = agent_cfg["system_prompt"]
-                if agent_cfg.get("prompt_key"):
-                    # TODO: 从 prompts 表加载 prompt_key 对应的内容并追加
-                    pass
-        
+        agent_capability_filter: Optional[CapabilityFilter] = None
+        llm_model: str | None = (model_name or "").strip() or None
+
+        agent_cfg: Dict[str, Any] | None = None
+        if agent_id and str(agent_id).strip():
+            agent_cfg = await agent_service.get_agent_by_id(str(agent_id).strip())
+        if agent_cfg is None and agent_name and str(agent_name).strip():
+            agent_cfg = await self._load_agent_config(str(agent_name).strip(), (agent_type or "internal").strip())
+
+        agent_label = str(agent_cfg.get("name") or agent_name or "agent") if agent_cfg else ""
+
+        if agent_cfg:
+            if agent_cfg.get("system_prompt"):
+                extra_system = str(agent_cfg.get("system_prompt") or "")
+
+            agent_prompt_key = agent_cfg.get("prompt_key") or ""
+            if agent_prompt_key:
+                prompt_content = await self._load_prompt_content(str(agent_prompt_key))
+                if prompt_content:
+                    extra_system = (extra_system + "\n\n" + prompt_content).strip()
+
+            mcp_servers = self._parse_json_list(agent_cfg.get("mcp_servers"))
+            agent_skills = self._parse_json_list(agent_cfg.get("agent_skills"))
+            allow_tools = self._parse_json_list(agent_cfg.get("allow_tools"))
+            deny_tools = self._parse_json_list(agent_cfg.get("deny_tools"))
+
+            meta_model = str(agent_cfg.get("model_name") or "").strip()
+            if meta_model:
+                llm_model = meta_model
+
+            if mcp_servers or agent_skills or allow_tools or deny_tools:
+                base_allowed: List[str] = []
+                if mcp_servers:
+                    base_allowed.extend(["list_mcp_tools", "call_mcp_tool"])
+                if agent_skills:
+                    base_allowed.append("load_agent_skill")
+
+                if deny_tools:
+                    if allow_tools:
+                        all_allowed = list(dict.fromkeys(base_allowed + allow_tools))
+                        agent_capability_filter = CapabilityFilter(allow_names=all_allowed, deny_names=deny_tools)
+                    elif base_allowed:
+                        agent_capability_filter = CapabilityFilter(allow_names=base_allowed, deny_names=deny_tools)
+                    else:
+                        agent_capability_filter = CapabilityFilter(allow_names=None, deny_names=deny_tools)
+                elif allow_tools:
+                    all_allowed = list(dict.fromkeys(base_allowed + allow_tools))
+                    agent_capability_filter = CapabilityFilter(allow_names=all_allowed, deny_names=None)
+                elif base_allowed:
+                    agent_capability_filter = CapabilityFilter(allow_names=base_allowed, deny_names=None)
+                else:
+                    agent_capability_filter = CapabilityFilter(allow_names=allow_tools, deny_names=None)
+            else:
+                # 仅内部智能体：未配置 MCP/Skill 时禁止对应工具，避免回落到「主通道全量工具」
+                if str(agent_cfg.get("agent_type") or "") == "internal":
+                    deny_extra: List[str] = []
+                    if not mcp_servers:
+                        deny_extra.extend(["list_mcp_tools", "call_mcp_tool"])
+                    if not agent_skills:
+                        deny_extra.append("load_agent_skill")
+                    if deny_extra:
+                        agent_capability_filter = CapabilityFilter(allow_names=None, deny_names=deny_extra)
+
+            if mcp_servers:
+                yield {
+                    "event": "thinking",
+                    "data": json.dumps(
+                        {"step": -1, "description": f"Agent {agent_label} configured with {len(mcp_servers)} MCP servers"}
+                    ),
+                }
+            if agent_skills:
+                yield {
+                    "event": "thinking",
+                    "data": json.dumps(
+                        {"step": -1, "description": f"Agent {agent_label} configured with {len(agent_skills)} skills"}
+                    ),
+                }
+
         history = await self._build_history(session_id, exclude_content=exclude_for_history)
+
         effective_filter = capability_filter
         if effective_filter is None:
             by_channel = load_channels_config().get(channel_id) or {}
@@ -92,8 +178,24 @@ class ConversationTurnService:
             deny = by_channel.get("deny_tools") or None
             if allow or deny:
                 effective_filter = CapabilityFilter(allow_names=allow, deny_names=deny)
+
+        if agent_capability_filter:
+            base_allow = list(effective_filter.allow_names) if effective_filter and effective_filter.allow_names else []
+            base_deny = list(effective_filter.deny_names) if effective_filter and effective_filter.deny_names else []
+            agent_deny = list(agent_capability_filter.deny_names or []) if agent_capability_filter.deny_names else []
+
+            if agent_capability_filter.allow_names is not None:
+                merged_allow = list(agent_capability_filter.allow_names)
+            else:
+                merged_allow = base_allow or None
+            merged_deny = list(dict.fromkeys(base_deny + agent_deny)) or None
+            effective_filter = CapabilityFilter(allow_names=merged_allow, deny_names=merged_deny)
+
         scheduler_cfg = load_scheduler_config()
-        requested_mode = (scheduler_mode or "").strip()
+        if agent_cfg:
+            requested_mode = "direct"
+        else:
+            requested_mode = (scheduler_mode or "").strip()
         if not requested_mode and task_tag:
             by_task_tag = (
                 (scheduler_cfg.get("routing") or {}).get("by_task_tag") or {}
@@ -153,6 +255,7 @@ class ConversationTurnService:
             capabilities=selected_caps,
             extra_system=extra_system,
             limits=limits,
+            model=llm_model,
         )
 
         accumulated_text = ""

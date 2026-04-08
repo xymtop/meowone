@@ -23,6 +23,8 @@ class ChatRequest(BaseModel):
     task_tag: Optional[str] = None
     agent_name: Optional[str] = None
     agent_type: Optional[str] = None
+    agent_id: Optional[str] = None
+    model_name: Optional[str] = None
 
 
 class CardActionRequest(BaseModel):
@@ -35,6 +37,10 @@ class CardActionRequest(BaseModel):
     timeout_seconds: Optional[int] = None
     scheduler_mode: Optional[str] = None
     task_tag: Optional[str] = None
+    agent_name: Optional[str] = None
+    agent_type: Optional[str] = None
+    agent_id: Optional[str] = None
+    model_name: Optional[str] = None
 
 
 class A2UIActionRequest(BaseModel):
@@ -47,6 +53,10 @@ class A2UIActionRequest(BaseModel):
     timeout_seconds: Optional[int] = None
     scheduler_mode: Optional[str] = None
     task_tag: Optional[str] = None
+    agent_name: Optional[str] = None
+    agent_type: Optional[str] = None
+    agent_id: Optional[str] = None
+    model_name: Optional[str] = None
 
 
 class MessageResponse(BaseModel):

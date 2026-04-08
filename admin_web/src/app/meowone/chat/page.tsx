@@ -475,8 +475,26 @@ function MermaidBlock({ source }: { source: string }) {
   return <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900/60" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
+function filterRenderableParts(parts: Segment[]): Segment[] {
+  return parts.filter((part) => {
+    if (part.type === "markdown" && !part.value.trim()) return false;
+    if (part.type === "mermaid" && !part.value.trim()) return false;
+    if (part.type === "a2ui" && !part.value.trim()) return false;
+    return true;
+  });
+}
+
 function RichContent({ content, onA2UIAction }: { content: string; onA2UIAction?: (action: A2UIAction) => void }) {
-  const parts = useMemo(() => parseSegments(content), [content]);
+  const parts = useMemo(() => filterRenderableParts(parseSegments(content)), [content]);
+  if (!parts.length && (content || "").trim()) {
+    return (
+      <div className="meow-chat-md prose prose-sm max-w-none text-[#111827] [&_p]:my-2 [&_p]:text-[#111827] [&_li]:text-[#111827] [&_strong]:text-[#030712] [&_code]:rounded [&_code]:bg-[#f3f4f6] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[#111827] [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[#d1d5db] [&_pre]:bg-[#f8fafc] [&_pre]:p-4 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[#111827] [&_.hljs]:bg-transparent [&_.hljs]:text-[#111827]">
+        <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+          {content}
+        </Markdown>
+      </div>
+    );
+  }
   return (
     <div className="space-y-3">
       {parts.map((part, idx) => {
@@ -484,7 +502,7 @@ function RichContent({ content, onA2UIAction }: { content: string; onA2UIAction?
           return (
             <div
               key={`md-${idx}`}
-              className="prose prose-sm max-w-none text-[#111827] [&_p]:my-2 [&_p]:text-[#111827] [&_li]:text-[#111827] [&_strong]:text-[#030712] [&_code]:rounded [&_code]:bg-[#f3f4f6] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[#111827] [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[#d1d5db] [&_pre]:bg-[#f8fafc] [&_pre]:p-4 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[#111827] [&_.hljs]:bg-transparent [&_.hljs]:text-[#111827]"
+              className="meow-chat-md prose prose-sm max-w-none text-[#111827] [&_p]:my-2 [&_p]:text-[#111827] [&_li]:text-[#111827] [&_strong]:text-[#030712] [&_code]:rounded [&_code]:bg-[#f3f4f6] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[#111827] [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-[#d1d5db] [&_pre]:bg-[#f8fafc] [&_pre]:p-4 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[#111827] [&_.hljs]:bg-transparent [&_.hljs]:text-[#111827] [&_table]:text-[#111827] [&_th]:text-[#111827] [&_td]:text-[#111827]"
             >
               <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
                 {part.value}
@@ -522,6 +540,48 @@ function RichContent({ content, onA2UIAction }: { content: string; onA2UIAction?
         );
       })}
     </div>
+  );
+}
+
+function CopyMessageButton({ text, variant }: { text: string; variant: "user" | "assistant" }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        const t = (text || "").trim();
+        if (!t) return;
+        try {
+          await navigator.clipboard.writeText(t);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 2000);
+        } catch {
+          // ignore
+        }
+      }}
+      className={cn(
+        "absolute right-2 top-2 z-10 shrink-0 rounded-lg p-1.5 transition-colors",
+        variant === "user"
+          ? "text-white/85 hover:bg-white/15 hover:text-white"
+          : "text-[#9aa0a6] hover:bg-[#f0f2f5] hover:text-[#1d2129]",
+      )}
+      title={copied ? "已复制" : "复制"}
+      aria-label={copied ? "已复制" : "复制消息"}
+    >
+      {copied ? (
+        <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+        </svg>
+      ) : (
+        <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"
+          />
+        </svg>
+      )}
+    </button>
   );
 }
 
@@ -614,21 +674,30 @@ function RobotIcon() {
 }
 
 // ============ Agent 选择器组件 ============
+// MeowOne 默认智能体（不传递 agent_name 时使用）
+const MEOWONE_DEFAULT_AGENT = "__meowone_default__";
+
 function AgentSelector({
   agents,
-  selectedAgent,
+  selectedAgentId,
   onSelect,
   onCreateNew,
+  onManageAll,
 }: {
-  agents: { name: string; description?: string; agent_type?: string }[];
-  selectedAgent: string;
-  onSelect: (name: string) => void;
+  agents: { id: string; name: string; description?: string; agent_type?: string }[];
+  selectedAgentId: string;
+  onSelect: (id: string) => void;
   onCreateNew: () => void;
+  onManageAll?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const currentAgent = agents.find((a) => a.name === selectedAgent);
+  const getDisplayName = () => {
+    if (selectedAgentId === MEOWONE_DEFAULT_AGENT) return "MeowOne";
+    const currentAgent = agents.find((a) => a.id === selectedAgentId);
+    return currentAgent?.name || "选择智能体";
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -640,6 +709,9 @@ function AgentSelector({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const internalAgents = agents.filter((a) => a.agent_type === "internal" || !a.agent_type);
+  const externalAgents = agents.filter((a) => a.agent_type === "external");
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
@@ -648,41 +720,96 @@ function AgentSelector({
         className="flex items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-sm transition-colors hover:bg-gray-50"
       >
         <RobotIcon />
-        <span className="font-medium">{currentAgent?.name || "选择智能体"}</span>
+        <span className="font-medium">{getDisplayName()}</span>
         <ChevronDownIcon />
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-xl border border-gray-200 bg-white shadow-lg">
-          <div className="max-h-64 overflow-y-auto p-1">
-            {agents.length === 0 ? (
-              <div className="px-3 py-4 text-center text-sm text-gray-500">
-                还没有智能体
+        <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-xl border border-gray-200 bg-white shadow-lg">
+          <div className="max-h-80 overflow-y-auto p-1">
+            <button
+              onClick={() => {
+                onSelect(MEOWONE_DEFAULT_AGENT);
+                setIsOpen(false);
+              }}
+              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                selectedAgentId === MEOWONE_DEFAULT_AGENT
+                  ? "bg-blue-50 text-blue-600"
+                  : "hover:bg-gray-50"
+              }`}
+            >
+              <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                <RobotIcon />
               </div>
-            ) : (
-              agents.map((agent) => (
-                <button
-                  key={agent.name}
-                  onClick={() => {
-                    onSelect(agent.name);
-                    setIsOpen(false);
-                  }}
-                  className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
-                    agent.name === selectedAgent
-                      ? "bg-blue-50 text-blue-600"
-                      : "hover:bg-gray-50"
-                  }`}
-                >
-                  <RobotIcon />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{agent.name}</p>
-                    <p className="truncate text-xs text-gray-500">{agent.description || "暂无描述"}</p>
-                  </div>
-                  {agent.name === selectedAgent && (
-                    <span className="size-2 shrink-0 rounded-full bg-blue-500" />
-                  )}
-                </button>
-              ))
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">MeowOne</p>
+                <p className="truncate text-xs text-gray-500">默认智能体，使用系统配置</p>
+              </div>
+              {selectedAgentId === MEOWONE_DEFAULT_AGENT && (
+                <span className="size-2 shrink-0 rounded-full bg-blue-500" />
+              )}
+            </button>
+
+            {(internalAgents.length > 0 || externalAgents.length > 0) && (
+              <div className="my-2 border-t border-gray-100" />
+            )}
+
+            {internalAgents.length > 0 && (
+              <>
+                <div className="px-3 py-1 text-xs font-medium text-gray-400">内部智能体</div>
+                {internalAgents.map((agent) => (
+                  <button
+                    key={agent.id}
+                    onClick={() => {
+                      onSelect(agent.id);
+                      setIsOpen(false);
+                    }}
+                    className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
+                      agent.id === selectedAgentId
+                        ? "bg-blue-50 text-blue-600"
+                        : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <RobotIcon />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{agent.name}</p>
+                      <p className="truncate text-xs text-gray-500">{agent.description || "暂无描述"}</p>
+                    </div>
+                    {agent.id === selectedAgentId && (
+                      <span className="size-2 shrink-0 rounded-full bg-blue-500" />
+                    )}
+                  </button>
+                ))}
+              </>
+            )}
+
+            {externalAgents.length > 0 && (
+              <>
+                <div className="px-3 py-1 text-xs font-medium text-gray-400">外部智能体</div>
+                {externalAgents.map((agent) => (
+                  <button
+                    key={agent.id}
+                    onClick={() => {
+                      onSelect(agent.id);
+                      setIsOpen(false);
+                    }}
+                    className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
+                      agent.id === selectedAgentId
+                        ? "bg-blue-50 text-blue-600"
+                        : "hover:bg-gray-50"
+                    }`}
+                  >
+                    <RobotIcon />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{agent.name}</p>
+                      <p className="truncate text-xs text-gray-500">{agent.description || "暂无描述"}</p>
+                    </div>
+                    {agent.id === selectedAgentId && (
+                      <span className="size-2 shrink-0 rounded-full bg-blue-500" />
+                    )}
+                  </button>
+                ))}
+              </>
             )}
           </div>
           <div className="border-t border-gray-100 p-1">
@@ -696,6 +823,18 @@ function AgentSelector({
               <PlusIcon />
               创建新智能体
             </button>
+            {onManageAll && (
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  onManageAll();
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                <RobotIcon />
+                管理所有智能体
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -705,12 +844,15 @@ function AgentSelector({
 
 // ============ 主组件 ============
 type AgentInfo = {
+  id: string;
   name: string;
   description?: string;
   agent_type?: string;
   mcp_servers?: string[];
   agent_skills?: string[];
   enabled?: boolean;
+  model_name?: string;
+  scheduler_mode?: string;
 };
 
 export default function MeowChatPage() {
@@ -724,8 +866,6 @@ export default function MeowChatPage() {
   const [streaming, setStreaming] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [defaultModelName, setDefaultModelName] = useState("未配置");
-  const [schedulerMode] = useState("direct");
   const [channelId] = useState("web");
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -738,21 +878,46 @@ export default function MeowChatPage() {
 
   // Agent 相关状态
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<string>(paramAgent || "");
+  // MeowOne 默认智能体（不传 agent_name）
+  const [selectedAgentId, setSelectedAgentId] = useState<string>(paramAgent ? paramAgent : "__meowone_default__");
+  const [selectedAgentName, setSelectedAgentName] = useState<string | undefined>(undefined);
+  const [selectedAgentType, setSelectedAgentType] = useState<string | undefined>(undefined);
+  // 模型和调度配置
+  const [modelName, setModelName] = useState<string>("未配置");
+  const [schedulerMode, setSchedulerMode] = useState<string>("direct");
+  const [modelList, setModelList] = useState<Record<string, unknown>[]>([]);
+  // 可编辑模式（默认智能体时可编辑模型和调度）
+  const [isConfigEditable, setIsConfigEditable] = useState(true);
 
   const loadAgents = useCallback(async () => {
     try {
-      const res = await meowoneApi.listAgents("internal");
-      const agentList = (res.agents || []) as AgentInfo[];
-      setAgents(agentList);
-      // 如果没有选择智能体但有可用的，选择第一个
-      if (!selectedAgent && agentList.length > 0) {
-        setSelectedAgent(agentList[0].name);
+      const [internalRes, externalRes] = await Promise.all([
+        meowoneApi.listAgents("internal"),
+        meowoneApi.listAgents("external"),
+      ]);
+      const internalList = (internalRes.agents || []) as AgentInfo[];
+      const externalList = (externalRes.agents || []) as AgentInfo[];
+      const allAgents = [...internalList, ...externalList];
+      setAgents(allAgents);
+      
+      // URL ?agent= 支持 id 或 name
+      if (paramAgent) {
+        const found =
+          allAgents.find((a) => a.id === paramAgent) || allAgents.find((a) => a.name === paramAgent);
+        if (found) {
+          setSelectedAgentId(found.id);
+          setSelectedAgentName(found.name);
+          setSelectedAgentType(found.agent_type);
+          setIsConfigEditable(false);
+          if (found.model_name) setModelName(String(found.model_name));
+          setSchedulerMode("direct");
+        }
       }
     } catch (e) {
       console.error("加载智能体失败:", e);
     }
-  }, [selectedAgent]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadSessions = async () => {
     const list = await meowoneApi.listSessions();
@@ -767,9 +932,13 @@ export default function MeowChatPage() {
       .listModels()
       .then((res) => {
         const found = (res.models || []).find((m) => Boolean((m as Record<string, unknown>).is_default));
-        setDefaultModelName(String((found as Record<string, unknown> | undefined)?.name || "未配置"));
+        const defaultModel = String((found as Record<string, unknown> | undefined)?.name || "未配置");
+        setModelList(res.models || []);
+        if (!modelName || modelName === "未配置") {
+          setModelName(defaultModel);
+        }
       })
-      .catch(() => setDefaultModelName("未配置"));
+      .catch(() => setModelName("未配置"));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -858,11 +1027,22 @@ export default function MeowChatPage() {
       },
     ]);
     try {
+      // 确定 agent 参数：MeowOne 默认不传，其他智能体需要传 agent_name 和 agent_type
+      const isMeowOne = selectedAgentId === "__meowone_default__";
+      const sel = agents.find((a) => a.id === selectedAgentId);
+      const agentName = isMeowOne ? undefined : sel?.name;
+      const agentType = isMeowOne ? undefined : (sel?.agent_type || "internal");
+      const agentId = isMeowOne ? undefined : selectedAgentId;
+      const sched = isMeowOne ? schedulerMode : "direct";
+
       await meowoneApi.streamChat(targetSessionId, { 
         content: text, 
         channel_id: "web",
-        agent_name: selectedAgent || undefined,
-        agent_type: "internal",
+        agent_name: agentName,
+        agent_type: agentType,
+        agent_id: agentId,
+        scheduler_mode: sched,
+        model_name: isMeowOne ? modelName : undefined,
       }, onStreamEvent, {
         signal: controller.signal,
       });
@@ -890,9 +1070,24 @@ export default function MeowChatPage() {
     setThinking(null);
     setStreamingTools([]);
     try {
+      const isMeowOne = selectedAgentId === "__meowone_default__";
+      const sel = agents.find((a) => a.id === selectedAgentId);
+      const agentName = isMeowOne ? undefined : sel?.name;
+      const agentType = isMeowOne ? undefined : (sel?.agent_type || "internal");
+      const agentId = isMeowOne ? undefined : selectedAgentId;
+      const sched = isMeowOne ? schedulerMode : "direct";
+
       await meowoneApi.streamA2UIAction(
         sessionId,
-        { action: action as unknown as Record<string, unknown>, channel_id: "web" },
+        { 
+          action: action as unknown as Record<string, unknown>, 
+          channel_id: "web",
+          agent_name: agentName,
+          agent_type: agentType,
+          agent_id: agentId,
+          scheduler_mode: sched,
+          model_name: isMeowOne ? modelName : undefined,
+        },
         onStreamEvent,
         { signal: controller.signal },
       );
@@ -924,7 +1119,9 @@ export default function MeowChatPage() {
   };
 
   const currentTitle = sessions.find((s) => s.id === sessionId)?.title || "新对话";
-  const currentAgentInfo = agents.find((a) => a.name === selectedAgent);
+  const currentAgentInfo = agents.find((a) => a.id === selectedAgentId);
+  const currentAgentName = currentAgentInfo?.name;
+  const currentAgentType = currentAgentInfo?.agent_type || "internal";
   const hasConversation = messages.length > 0 || Boolean(streaming);
   const suggestionPrompts = [
     "帮我总结一下今天的工作重点",
@@ -940,6 +1137,21 @@ export default function MeowChatPage() {
       [data-slot="select-content"] { z-index: 350 !important; }
       .a2ui-standalone-card,
       .a2ui-standalone-card * { overflow: visible; }
+      /* A2UI text on light cards (avoid inheriting invisible / wrong theme colors) */
+      #meow-chat-scroll .a2ui-standalone-card { color: #1d2129; }
+      /* github.css + prose: ensure code blocks stay readable on white bubbles */
+      #meow-chat-scroll .meow-chat-md pre code.hljs,
+      #meow-chat-scroll .meow-chat-md code.hljs {
+        color: #111827 !important;
+        background: transparent !important;
+      }
+      #meow-chat-scroll .meow-chat-md .hljs-comment,
+      #meow-chat-scroll .meow-chat-md .hljs-quote { color: #6b7280 !important; }
+      #meow-chat-scroll .meow-chat-md .hljs-keyword,
+      #meow-chat-scroll .meow-chat-md .hljs-selector-tag,
+      #meow-chat-scroll .meow-chat-md .hljs-title { color: #2563eb !important; }
+      #meow-chat-scroll .meow-chat-md .hljs-string,
+      #meow-chat-scroll .meow-chat-md .hljs-attr { color: #059669 !important; }
     `}</style>
     <div
       className={cn("grid h-full min-h-0 flex-1 grid-cols-1 overflow-hidden bg-[#f5f6f7]", historyCollapsed ? "md:grid-cols-1" : "md:grid-cols-[268px_1fr]")}
@@ -1088,10 +1300,32 @@ export default function MeowChatPage() {
             <div className="flex items-center gap-3">
               <AgentSelector
                 agents={agents}
-                selectedAgent={selectedAgent}
-                onSelect={setSelectedAgent}
+                selectedAgentId={selectedAgentId}
+                onSelect={(id) => {
+                  setSelectedAgentId(id);
+                  if (id === "__meowone_default__") {
+                    setSelectedAgentName(undefined);
+                    setSelectedAgentType(undefined);
+                    setIsConfigEditable(true);
+                    const defaultModel = modelList.find((m) => (m as Record<string, unknown>).is_default);
+                    setModelName(String((defaultModel as Record<string, unknown>)?.name || "未配置"));
+                    setSchedulerMode("direct");
+                    return;
+                  }
+                  const agent = agents.find((a) => a.id === id);
+                  if (agent) {
+                    setSelectedAgentName(agent.name);
+                    setSelectedAgentType(agent.agent_type);
+                    setIsConfigEditable(false);
+                    if (agent.model_name) setModelName(String(agent.model_name));
+                    setSchedulerMode("direct");
+                  }
+                }}
                 onCreateNew={() => {
                   window.location.href = "/meowone/agents/create";
+                }}
+                onManageAll={() => {
+                  window.location.href = "/meowone/agents";
                 }}
               />
               {currentAgentInfo && (
@@ -1110,12 +1344,39 @@ export default function MeowChatPage() {
               )}
             </div>
             <div className="flex items-center gap-2 text-[12px] text-[#6b7280]">
-              <span className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5">
-                模型: {defaultModelName}
-              </span>
-              <span className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5">
-                调度: {schedulerMode}
-              </span>
+              {isConfigEditable ? (
+                <>
+                  <select
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5 text-[#6b7280]"
+                  >
+                    {modelList.map((m) => (
+                      <option key={String((m as Record<string, unknown>).name)} value={String((m as Record<string, unknown>).name)}>
+                        {String((m as Record<string, unknown>).name)}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={schedulerMode}
+                    onChange={(e) => setSchedulerMode(e.target.value)}
+                    className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5 text-[#6b7280]"
+                  >
+                    <option value="direct">direct</option>
+                    <option value="loop">loop</option>
+                    <option value="swarm">swarm</option>
+                  </select>
+                </>
+              ) : (
+                <>
+                  <span className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5">
+                    模型: {modelName}
+                  </span>
+                  <span className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5">
+                    调度: {schedulerMode}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1150,12 +1411,20 @@ export default function MeowChatPage() {
                   <RobotIcon />
                 </div>
                 <h2 className="text-[32px] font-semibold tracking-tight text-[#1d2129]">
-                  {selectedAgent ? `与 ${selectedAgent} 对话` : "有什么我能帮你的吗？"}
+                  {selectedAgentId === "__meowone_default__"
+                    ? "有什么我能帮你的吗？"
+                    : currentAgentName
+                    ? `与 ${currentAgentName} 对话`
+                    : "有什么我能帮你的吗？"}
                 </h2>
                 <p className="mt-3 text-[14px] text-[#86909c]">
-                  {selectedAgent ? "开始对话，测试你的智能体" : "请先选择一个智能体或创建一个新的"}
+                  {selectedAgentId === "__meowone_default__"
+                    ? "使用 MeowOne 默认智能体开始对话"
+                    : currentAgentName
+                    ? "开始对话，测试你的智能体"
+                    : "请先选择一个智能体或创建一个新的"}
                 </p>
-                {!selectedAgent && agents.length === 0 && (
+                {!currentAgentName && agents.length === 0 && (
                   <Link
                     href="/meowone/agents/create"
                     className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 font-medium text-white transition-all hover:from-blue-600 hover:to-purple-700"
@@ -1180,20 +1449,22 @@ export default function MeowChatPage() {
             {messages.map((m) => {
               if (m.role !== "assistant") {
                 return (
-                  <div key={m.id} className="flex justify-end">
-                    <div className="max-w-[86%] rounded-[18px] bg-[#eaf2ff] px-4 py-3 text-[15px] leading-7 text-[#1d2129]">
+                  <div key={m.id} className="flex justify-end mb-6">
+                    <div className="relative max-w-[80%] overflow-visible rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 px-6 py-4 pr-12 text-[15px] leading-7 text-white shadow-[0_4px_16px_rgba(59,130,246,0.25)]">
+                      <CopyMessageButton text={m.content || ""} variant="user" />
                       <div className="whitespace-pre-wrap">{m.content}</div>
                     </div>
                   </div>
                 );
               }
 
-              const parts = parseSegments(m.content || "");
+              const parts = filterRenderableParts(parseSegments(m.content || ""));
               const hasA2UI = parts.some((p) => p.type === "a2ui");
               if (!hasA2UI) {
                 return (
-                  <div key={m.id} className="flex justify-start">
-                    <div className="w-full max-w-[92%] rounded-[18px] border border-[#e6eaf2] bg-white px-4 py-3 text-[15px] leading-7 text-[#1d2129]">
+                  <div key={m.id} className="flex justify-start mb-6">
+                    <div className="relative w-full max-w-[80%] overflow-visible rounded-2xl border border-gray-100 bg-white px-6 py-4 pr-12 text-[15px] leading-7 text-[#1d2129] shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                      <CopyMessageButton text={m.content || ""} variant="assistant" />
                       <RichContent content={m.content || ""} onA2UIAction={handleA2UIAction} />
                     </div>
                   </div>
@@ -1201,8 +1472,9 @@ export default function MeowChatPage() {
               }
 
               return (
-                <div key={m.id} className="flex justify-start">
-                  <div className="flex w-full max-w-[92%] flex-col gap-2">
+                <div key={m.id} className="flex justify-start mb-6">
+                  <div className="relative flex w-full max-w-[80%] flex-col gap-3 overflow-visible pr-10">
+                    <CopyMessageButton text={m.content || ""} variant="assistant" />
                     {parts.map((part, idx) => {
                       if (part.type === "a2ui") {
                         const a2msgs = normalizeA2UIMessages(parseA2UIMessages(part.value));
@@ -1214,7 +1486,7 @@ export default function MeowChatPage() {
                           );
                         }
                         return (
-                          <div key={`${m.id}-a2ui-${idx}`} className="a2ui-standalone-card not-prose relative z-30 w-full overflow-visible rounded-[18px] border border-[#e6eaf2] bg-[#fcfdff] p-4 shadow-[0_2px_10px_rgba(29,33,41,0.06)]">
+                          <div key={`${m.id}-a2ui-${idx}`} className="a2ui-standalone-card not-prose relative z-30 w-full overflow-visible rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
                             <A2UIProvider messages={a2msgs} catalog={meowoneCatalog}>
                               <A2UIRenderer onAction={handleA2UIAction} />
                             </A2UIProvider>
@@ -1223,13 +1495,13 @@ export default function MeowChatPage() {
                       }
                       if (part.type === "mermaid") {
                         return (
-                          <div key={`${m.id}-mermaid-${idx}`} className="w-full rounded-[18px] border border-[#e6eaf2] bg-white px-4 py-3">
+                          <div key={`${m.id}-mermaid-${idx}`} className="w-full rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
                             <MermaidBlock source={part.value} />
                           </div>
                         );
                       }
                       return (
-                        <div key={`${m.id}-md-${idx}`} className="w-full rounded-[18px] border border-[#e6eaf2] bg-white px-4 py-3 text-[15px] leading-7 text-[#1d2129]">
+                        <div key={`${m.id}-md-${idx}`} className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-3.5 text-[15px] leading-7 text-[#1d2129] shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
                           <RichContent content={part.value} onA2UIAction={handleA2UIAction} />
                         </div>
                       );
@@ -1239,33 +1511,36 @@ export default function MeowChatPage() {
               );
             })}
             {streamingTools.length ? (
-              <div className="max-w-[86%] rounded-[14px] border border-[#dbeafe] bg-[#eff6ff] px-3.5 py-2 text-[12px] text-[#1e3a8a]">
-                <div className="mb-1 font-medium text-blue-800/90">工具</div>
+              <div className="max-w-[80%] rounded-xl border border-blue-100 bg-blue-50/80 px-5 py-3.5 text-[13px] text-blue-800 mb-6 shadow-sm">
+                <div className="mb-2 font-medium">工具调用</div>
                 <div className="flex flex-wrap gap-2">
                   {streamingTools.map((t, idx) => (
                     <span
                       key={`${t.toolCallId}-${idx}`}
-                      className="rounded-lg bg-white/90 px-2.5 py-0.5 shadow-sm ring-1 ring-blue-100"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 shadow-sm ring-1 ring-blue-100"
                       title={t.toolCallId}
                     >
                       {t.name}
                       {t.status === "running" && (
-                        <span className="ml-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500 align-middle" />
+                        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500 align-middle" />
                       )}
-                      {t.status === "ok" && <span className="ml-1 text-emerald-600">✓</span>}
-                      {t.status === "error" && <span className="ml-1 text-red-600">✗</span>}
+                      {t.status === "ok" && <span className="text-emerald-600">✓</span>}
+                      {t.status === "error" && <span className="text-red-600">✗</span>}
                     </span>
                   ))}
                 </div>
               </div>
             ) : null}
             {streaming ? (
-              <div className="max-w-[86%] rounded-[18px] border border-[#e6eaf2] bg-white px-4 py-3 text-[15px] leading-7 text-[#1d2129]">
-                <RichContent content={streaming} onA2UIAction={handleA2UIAction} />
+              <div className="flex justify-start mb-6">
+                <div className="relative w-full max-w-[80%] overflow-visible rounded-2xl border border-gray-100 bg-white px-6 py-4 pr-12 text-[15px] leading-7 text-[#1d2129] shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                  <CopyMessageButton text={streaming} variant="assistant" />
+                  <RichContent content={streaming} onA2UIAction={handleA2UIAction} />
+                </div>
               </div>
             ) : null}
             {thinking ? (
-              <div className="max-w-[86%] rounded-[14px] border border-[#e5e7eb] bg-[#f8fafc] px-3.5 py-2.5 text-[13px] text-[#4b5563]">
+              <div className="max-w-[80%] rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-[13px] text-gray-500 mb-6 shadow-sm">
                 <div className="flex items-center gap-2">
                   <div className="flex gap-1">
                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:0ms]" />
@@ -1297,9 +1572,9 @@ export default function MeowChatPage() {
                     setPrompt(e.target.value);
                     adjustTextareaHeight();
                   }}
-                  placeholder={selectedAgent ? "输入消息..." : "请先选择一个智能体"}
+                  placeholder={currentAgentName ? "输入消息..." : "向MeowOne提问"}
                   rows={1}
-                  disabled={!selectedAgent && agents.length === 0}
+                  disabled={!currentAgentName && agents.length === 0}
                   className="max-h-40 min-h-[48px] w-full resize-none border-0 bg-transparent py-2.5 text-[15px] font-normal leading-7 text-[#1d2129] antialiased outline-none placeholder:text-[#9aa0a6] placeholder:text-[14px]"
                   onKeyDown={async (e) => {
                     if (composingRef.current || (e.nativeEvent as KeyboardEvent).isComposing) return;

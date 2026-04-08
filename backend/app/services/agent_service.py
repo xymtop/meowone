@@ -17,6 +17,7 @@ class ExternalAgentEntry:
     base_url: str
     protocol: str = "a2a"
     enabled: bool = True
+    auth_token: Optional[str] = None
 
 
 def _json_list(value: Optional[List[str]]) -> str:
@@ -37,6 +38,10 @@ def _to_dict(row: Any) -> Dict[str, Any]:
         data["metadata_json"] = json.loads(data.get("metadata_json") or "{}")
     except Exception:
         data["metadata_json"] = {}
+    # 从 metadata_json 中提取 model_name 和 scheduler_mode
+    metadata = data["metadata_json"]
+    data["model_name"] = metadata.get("model_name", "") if isinstance(metadata, dict) else ""
+    data["scheduler_mode"] = metadata.get("scheduler_mode", "direct") if isinstance(metadata, dict) else "direct"
     data["protocol"] = str(data.get("protocol") or "").strip() or (
         "a2a" if str(data.get("agent_type") or "") == "external" else "internal_loop"
     )
@@ -56,6 +61,8 @@ async def upsert_internal_agent(
     max_tool_phases: Optional[int] = None,
     timeout_seconds: Optional[int] = None,
     prompt_key: str = "",
+    model_name: str = "",
+    scheduler_mode: str = "direct",
 ) -> None:
     async with get_db() as db:
         await db.execute(
@@ -65,7 +72,7 @@ async def upsert_internal_agent(
               allow_tools, deny_tools, max_rounds, max_tool_phases, timeout_seconds, prompt_key,
               protocol, metadata_json, enabled, source, updated_at
             )
-            VALUES (?, ?, 'internal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'internal_loop', '{}', 1, 'db', datetime('now'))
+            VALUES (?, ?, 'internal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'internal_loop', ?, 1, 'db', datetime('now'))
             ON CONFLICT(agent_type, name) DO UPDATE SET
               description=excluded.description,
               system_prompt=excluded.system_prompt,
@@ -78,7 +85,7 @@ async def upsert_internal_agent(
               timeout_seconds=excluded.timeout_seconds,
               prompt_key=excluded.prompt_key,
               protocol='internal_loop',
-              metadata_json=COALESCE(agents.metadata_json, '{}'),
+              metadata_json=excluded.metadata_json,
               enabled=1,
               source='db',
               updated_at=datetime('now')
@@ -96,28 +103,47 @@ async def upsert_internal_agent(
                 max_tool_phases,
                 timeout_seconds,
                 prompt_key,
+                json.dumps({"model_name": model_name, "scheduler_mode": scheduler_mode}, ensure_ascii=False),
             ),
         )
         await db.commit()
 
 
-async def upsert_external_agent(*, name: str, description: str, base_url: str, protocol: str = "a2a") -> None:
+async def upsert_external_agent(
+    *,
+    name: str,
+    description: str,
+    base_url: str,
+    protocol: str = "a2a",
+    auth_token: Optional[str] = None,
+    enabled: bool = True,
+) -> None:
+    metadata = {"auth_token": auth_token} if auth_token else {}
     async with get_db() as db:
         await db.execute(
             """
             INSERT INTO agents (
               id, name, agent_type, description, base_url, protocol, metadata_json, enabled, source, updated_at
             )
-            VALUES (?, ?, 'external', ?, ?, ?, '{}', 1, 'db', datetime('now'))
+            VALUES (?, ?, 'external', ?, ?, ?, ?, ?, 'db', datetime('now'))
             ON CONFLICT(agent_type, name) DO UPDATE SET
               description=excluded.description,
               base_url=excluded.base_url,
               protocol=excluded.protocol,
-              enabled=1,
+              metadata_json=excluded.metadata_json,
+              enabled=excluded.enabled,
               source='db',
               updated_at=datetime('now')
             """,
-            (str(uuid.uuid4()), name, description, base_url.rstrip("/"), protocol),
+            (
+                str(uuid.uuid4()),
+                name,
+                description,
+                base_url.rstrip("/"),
+                protocol,
+                json.dumps(metadata, ensure_ascii=False),
+                1 if enabled else 0,
+            ),
         )
         await db.commit()
 
@@ -145,6 +171,16 @@ async def get_agent(*, name: str, agent_type: str) -> Optional[Dict[str, Any]]:
     return _to_dict(row) if row else None
 
 
+async def get_agent_by_id(agent_id: str) -> Optional[Dict[str, Any]]:
+    aid = (agent_id or "").strip()
+    if not aid:
+        return None
+    async with get_db() as db:
+        cur = await db.execute("SELECT * FROM agents WHERE id = ? LIMIT 1", (aid,))
+        row = await cur.fetchone()
+    return _to_dict(row) if row else None
+
+
 async def delete_agent(*, name: str, agent_type: str) -> bool:
     async with get_db() as db:
         cur = await db.execute(
@@ -161,7 +197,7 @@ def list_external_agents_sync() -> List[ExternalAgentEntry]:
     try:
         rows = conn.execute(
             """
-            SELECT name, description, base_url, enabled
+            SELECT name, description, base_url, enabled, metadata_json
             FROM agents
             WHERE agent_type = 'external' AND protocol = 'a2a' AND enabled = 1
             ORDER BY name ASC
@@ -173,6 +209,11 @@ def list_external_agents_sync() -> List[ExternalAgentEntry]:
             name = str(row["name"] or "").strip()
             if not name or not base_url:
                 continue
+            metadata = {}
+            try:
+                metadata = json.loads(row["metadata_json"] or "{}")
+            except Exception:
+                pass
             out.append(
                 ExternalAgentEntry(
                     tool_name=name,
@@ -180,6 +221,7 @@ def list_external_agents_sync() -> List[ExternalAgentEntry]:
                     base_url=base_url.rstrip("/"),
                     protocol="a2a",
                     enabled=bool(row["enabled"]),
+                    auth_token=metadata.get("auth_token"),
                 )
             )
         return out

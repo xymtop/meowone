@@ -34,9 +34,13 @@ def mcp_yaml_path() -> Path:
 @dataclass
 class McpServerEntry:
     name: str
-    command: str
+    command: Optional[str] = None
     cwd: Optional[str] = None
     description: str = ""
+    transport: str = "stdio"
+    url: Optional[str] = None
+    auth_type: str = "none"
+    auth_token: Optional[str] = None
 
 
 def _command_from_parts(command: str, args: Any) -> str:
@@ -51,7 +55,7 @@ def _command_from_parts(command: str, args: Any) -> str:
 def _entries_from_config(raw: Dict[str, Any]) -> List[McpServerEntry]:
     """
     Supports:
-    - **servers**: MeowOne list of { name, command, description?, cwd?, args? }
+    - **servers**: MeowOne list of { name, command, description?, cwd?, args?, transport?, url? }
     - **mcpServers**: Cursor / IDE style map name -> { command, args?, env?, ... }
     """
     out: List[McpServerEntry] = []
@@ -68,8 +72,8 @@ def _entries_from_config(raw: Dict[str, Any]) -> List[McpServerEntry]:
                 continue
             cwd = s.get("cwd")
             desc = str(s.get("description") or "")
-            if name in seen:
-                continue
+            transport = str(s.get("transport", "stdio"))
+            url = s.get("url")
             seen.add(name)
             out.append(
                 McpServerEntry(
@@ -77,6 +81,8 @@ def _entries_from_config(raw: Dict[str, Any]) -> List[McpServerEntry]:
                     command=cmd,
                     cwd=str(cwd).strip() if cwd else None,
                     description=desc,
+                    transport=transport,
+                    url=str(url).strip() if url else None,
                 )
             )
 
@@ -114,9 +120,13 @@ def load_mcp_servers() -> List[McpServerEntry]:
             out.append(
                 McpServerEntry(
                     name=str(row.get("name") or ""),
-                    command=str(row.get("command") or ""),
+                    command=str(row.get("command") or "") or None,
                     cwd=str(row.get("cwd") or "").strip() or None,
                     description=str(row.get("description") or ""),
+                    transport=str(row.get("transport", "stdio")),
+                    url=str(row.get("url") or "").strip() or None,
+                    auth_type=str(row.get("auth_type", "none")),
+                    auth_token=str(row.get("auth_token") or "").strip() or None,
                 )
             )
         return out

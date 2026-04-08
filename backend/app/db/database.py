@@ -80,11 +80,16 @@ ON agent_execution_logs (agent_name, created_at);
 CREATE TABLE IF NOT EXISTS mcp_servers (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
-    command TEXT NOT NULL,
+    command TEXT,
     cwd TEXT,
     description TEXT DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1,
     source TEXT DEFAULT 'db',
+    transport TEXT DEFAULT 'stdio',
+    url TEXT,
+    auth_type TEXT DEFAULT 'none',
+    auth_token TEXT,
+    env_json TEXT DEFAULT '{}',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -96,6 +101,10 @@ CREATE TABLE IF NOT EXISTS skills (
     body TEXT DEFAULT '',
     enabled INTEGER NOT NULL DEFAULT 1,
     source TEXT DEFAULT 'db',
+    trigger_keywords TEXT DEFAULT '[]',
+    category TEXT DEFAULT 'general',
+    examples TEXT DEFAULT '[]',
+    version TEXT DEFAULT '1.0.0',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -207,6 +216,8 @@ async def init_db() -> None:
         await db.execute("PRAGMA foreign_keys = ON")
         await db.executescript(_CREATE_TABLES)
         await _migrate_agents_table(db)
+        await _migrate_mcp_servers_table(db)
+        await _migrate_skills_table(db)
         await db.execute(_INSERT_DEFAULT_USER)
         await db.commit()
 
@@ -221,6 +232,36 @@ async def _migrate_agents_table(db: aiosqlite.Connection) -> None:
         await db.execute("ALTER TABLE agents ADD COLUMN prompt_key TEXT DEFAULT ''")
     if "metadata_json" not in cols:
         await db.execute("ALTER TABLE agents ADD COLUMN metadata_json TEXT DEFAULT '{}'")
+
+
+async def _migrate_mcp_servers_table(db: aiosqlite.Connection) -> None:
+    cur = await db.execute("PRAGMA table_info(mcp_servers)")
+    rows = await cur.fetchall()
+    cols = {str(r[1]) for r in rows}
+    if "transport" not in cols:
+        await db.execute("ALTER TABLE mcp_servers ADD COLUMN transport TEXT DEFAULT 'stdio'")
+    if "url" not in cols:
+        await db.execute("ALTER TABLE mcp_servers ADD COLUMN url TEXT")
+    if "auth_type" not in cols:
+        await db.execute("ALTER TABLE mcp_servers ADD COLUMN auth_type TEXT DEFAULT 'none'")
+    if "auth_token" not in cols:
+        await db.execute("ALTER TABLE mcp_servers ADD COLUMN auth_token TEXT")
+    if "env_json" not in cols:
+        await db.execute("ALTER TABLE mcp_servers ADD COLUMN env_json TEXT DEFAULT '{}'")
+
+
+async def _migrate_skills_table(db: aiosqlite.Connection) -> None:
+    cur = await db.execute("PRAGMA table_info(skills)")
+    rows = await cur.fetchall()
+    cols = {str(r[1]) for r in rows}
+    if "trigger_keywords" not in cols:
+        await db.execute("ALTER TABLE skills ADD COLUMN trigger_keywords TEXT DEFAULT '[]'")
+    if "category" not in cols:
+        await db.execute("ALTER TABLE skills ADD COLUMN category TEXT DEFAULT 'general'")
+    if "examples" not in cols:
+        await db.execute("ALTER TABLE skills ADD COLUMN examples TEXT DEFAULT '[]'")
+    if "version" not in cols:
+        await db.execute("ALTER TABLE skills ADD COLUMN version TEXT DEFAULT '1.0.0'")
 
 
 @asynccontextmanager

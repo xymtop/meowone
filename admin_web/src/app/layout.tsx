@@ -6,7 +6,8 @@ import { Sidebar } from "@/components/Layouts/sidebar";
 
 import "flatpickr/dist/flatpickr.min.css";
 import "jsvectormap/dist/jsvectormap.css";
-import "highlight.js/styles/github-dark.css";
+/* Light theme: matches white cards in admin; github-dark makes light text on light bg (invisible). */
+import "highlight.js/styles/github.css";
 import type { Metadata } from "next";
 import NextTopLoader from "nextjs-toploader";
 import type { PropsWithChildren } from "react";
