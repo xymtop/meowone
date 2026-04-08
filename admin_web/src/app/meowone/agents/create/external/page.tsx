@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { meowoneApi } from "@/lib/meowone-api";
 
@@ -66,7 +66,18 @@ type DiscoveredCard = {
 
 // ============ 主组件 ============
 export default function CreateExternalAgentPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-500">加载中...</div>}>
+      <CreateExternalAgentContent />
+    </Suspense>
+  );
+}
+
+function CreateExternalAgentContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editName = searchParams.get("edit");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [discovering, setDiscovering] = useState(false);
@@ -77,6 +88,35 @@ export default function CreateExternalAgentPage() {
   const [baseUrl, setBaseUrl] = useState("");
   const [authToken, setAuthToken] = useState("");
   const [discoveredCard, setDiscoveredCard] = useState<DiscoveredCard | null>(null);
+
+  const isEditing = Boolean(editName);
+
+  // 加载现有数据用于编辑
+  const loadExisting = useCallback(async (agentName: string) => {
+    try {
+      setLoading(true);
+      const agent = await meowoneApi.getExternalAgent(agentName) as {
+        name: string;
+        description?: string;
+        base_url?: string;
+        metadata_json?: Record<string, unknown>;
+      };
+      setName(agent.name);
+      setDescription(agent.description || "");
+      setBaseUrl(agent.base_url || "");
+      setAuthToken((agent.metadata_json?.auth_token as string) || "");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (editName) {
+      void loadExisting(editName);
+    }
+  }, [editName, loadExisting]);
 
   // 发现外部 Agent
   const handleDiscover = async () => {
@@ -155,8 +195,12 @@ export default function CreateExternalAgentPage() {
               <ArrowLeftIcon />
             </Link>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">连接外部智能体</h1>
-              <p className="text-sm text-gray-500">通过 A2A 协议连接远程 Agent</p>
+              <h1 className="text-xl font-semibold text-gray-900">
+                {isEditing ? "编辑外部智能体" : "连接外部智能体"}
+              </h1>
+              <p className="text-sm text-gray-500">
+                {isEditing ? "修改外部 Agent 连接配置" : "通过 A2A 协议连接远程 Agent"}
+              </p>
             </div>
           </div>
         </div>
@@ -286,7 +330,7 @@ export default function CreateExternalAgentPage() {
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                <LockIcon className="inline size-4 mr-1" />
+                <LockIcon />
                 描述
               </label>
               <input
@@ -300,7 +344,7 @@ export default function CreateExternalAgentPage() {
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                <LockIcon className="inline size-4 mr-1" />
+                <LockIcon />
                 认证令牌 (可选)
               </label>
               <input
@@ -327,7 +371,7 @@ export default function CreateExternalAgentPage() {
           </ul>
         </div>
 
-        {/* 创建按钮 */}
+        {/* 保存按钮 */}
         <button
           onClick={() => void handleCreate()}
           disabled={loading || !name.trim() || !baseUrl.trim()}
@@ -336,12 +380,12 @@ export default function CreateExternalAgentPage() {
           {loading ? (
             <>
               <div className="size-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              连接中...
+              保存中...
             </>
           ) : (
             <>
               <GlobeIcon />
-              连接外部 Agent
+              {isEditing ? "保存更改" : "连接外部 Agent"}
             </>
           )}
         </button>

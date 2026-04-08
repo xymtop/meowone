@@ -15,6 +15,7 @@ from app.services.skill_service import (
     delete_skill as delete_skill_record,
     list_skills as list_skill_records,
     upsert_skill as upsert_skill_record,
+    set_skill_enabled as set_skill_enabled_record,
 )
 from app.services.skill_fs import (
     list_skills_as_dicts,
@@ -146,6 +147,20 @@ async def upsert_skill(body: SkillUpsertRequest) -> Dict[str, Any]:
     return {"ok": True, "name": name}
 
 
+@router.post("/skills/{name}/enabled")
+async def set_skill_enabled(name: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    """启用或禁用技能"""
+    target = name.strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="name is required")
+    if "/" in target or "\\" in target or target.startswith("."):
+        raise HTTPException(status_code=400, detail="invalid skill name")
+    enabled = bool(body.get("enabled", True))
+    await set_skill_enabled_record(target, enabled)
+    invalidate_config_cache()
+    return {"ok": True, "updated": True, "enabled": enabled}
+
+
 @router.delete("/skills/{name}")
 async def delete_skill(name: str) -> Dict[str, Any]:
     target = name.strip()
@@ -206,7 +221,7 @@ async def create_skill_fs(body: SkillCreateRequest) -> Dict[str, Any]:
 
 
 @router.post("/skills/fs/{name}/files")
-async def update_skill_file(name: str, body: SkillUpdateFileRequest) -> Dict[str, Any]:
+async def update_skill_fs_file(name: str, body: SkillUpdateFileRequest) -> Dict[str, Any]:
     """更新 Skill 中的文件"""
     target = name.strip()
     if not target:

@@ -409,6 +409,14 @@ export const meowoneApi = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  setSkillEnabled: (name: string, enabled: boolean) =>
+    request<{ ok: boolean; updated: boolean; enabled: boolean }>(
+      `/api/capabilities/skills/${encodeURIComponent(name)}/enabled`,
+      {
+        method: "POST",
+        body: JSON.stringify({ enabled }),
+      },
+    ),
   deleteSkill: (name: string) =>
     request<{ ok: boolean; deleted: boolean }>(
       `/api/capabilities/skills/${encodeURIComponent(name)}`,
@@ -431,6 +439,22 @@ export const meowoneApi = {
         method: "POST",
         body: JSON.stringify({ file_path: filePath, content }),
       },
+    ),
+  createSkillFs: (body: {
+    name: string;
+    description?: string;
+    category?: string;
+    trigger_keywords?: string[];
+    examples?: string[];
+  }) =>
+    request<{ ok: boolean; name: string }>("/api/capabilities/skills/fs", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteSkillFs: (name: string) =>
+    request<{ ok: boolean; deleted: boolean }>(
+      `/api/capabilities/skills/fs/${encodeURIComponent(name)}`,
+      { method: "DELETE" },
     ),
 
   listPrompts: (enabledOnly?: boolean) =>
@@ -474,6 +498,8 @@ export const meowoneApi = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  getExternalAgent: (name: string) =>
+    request<Record<string, unknown>>(`/api/agents/external/${name}`),
   upsertExternalAgent: (body: Record<string, unknown>) =>
     request<{ ok: boolean; name: string; agent_type: string }>("/api/agents/external", {
       method: "POST",
@@ -481,12 +507,12 @@ export const meowoneApi = {
     }),
   deleteAgent: (agentType: string, name: string) =>
     request<{ ok: boolean; deleted: boolean }>(
-      `/api/agents/${encodeURIComponent(agentType)}/${encodeURIComponent(name)}`,
+      `/api/agents/${agentType}/${name}`,
       { method: "DELETE" },
     ),
   getAgentDetail: (agentType: string, name: string) =>
     request<AgentDetailResponse>(
-      `/api/agents/${encodeURIComponent(agentType)}/${encodeURIComponent(name)}`,
+      `/api/agents/${agentType}/${name}`,
     ),
 
   listInternalAgentsRuntime: () => request<InternalAgentsListResponse>("/api/internal-agents"),
@@ -634,4 +660,293 @@ export const meowoneApi = {
       `/api/tasks/${encodeURIComponent(taskId)}/retry`,
       { method: "POST", body: JSON.stringify({}) },
     ),
+
+  // ============ v3 API (Organization, Team, Loop, Strategy, Environment) ============
+  listOrganizations: (parentOrgId?: string) => {
+    const q = parentOrgId ? `?parent_org_id=${encodeURIComponent(parentOrgId)}` : "";
+    return request<{ count: number; organizations: Record<string, unknown>[] }>(`/api/v3/orgs${q}`);
+  },
+  createOrganization: (body: {
+    name: string;
+    description?: string;
+    parent_org_id?: string;
+    settings?: Record<string, unknown>;
+  }) =>
+    request<{ ok: boolean; organization: Record<string, unknown> }>("/api/v3/orgs", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateOrganization: (orgId: string, body: {
+    name?: string;
+    description?: string;
+    parent_org_id?: string;
+    settings?: Record<string, unknown>;
+  }) =>
+    request<{ ok: boolean; organization: Record<string, unknown> }>(
+      `/api/v3/orgs/${encodeURIComponent(orgId)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+  deleteOrganization: (orgId: string) =>
+    request<{ ok: boolean; deleted: boolean }>(
+      `/api/v3/orgs/${encodeURIComponent(orgId)}`,
+      { method: "DELETE" },
+    ),
+  addOrgAgent: (orgId: string, agentId: string) =>
+    request<{ ok: boolean }>(`/api/v3/orgs/${encodeURIComponent(orgId)}/agents`, {
+      method: "POST",
+      body: JSON.stringify({ agent_id: agentId }),
+    }),
+
+  listTeams: (orgId?: string) => {
+    const q = orgId ? `?org_id=${encodeURIComponent(orgId)}` : "";
+    return request<{ count: number; teams: Record<string, unknown>[] }>(`/api/v3/teams${q}`);
+  },
+  createTeam: (body: {
+    name: string;
+    org_id: string;
+    description?: string;
+    parent_team_id?: string;
+    leader_agent_id?: string;
+    default_strategy?: string;
+    strategy_config?: Record<string, unknown>;
+  }) =>
+    request<{ ok: boolean; team: Record<string, unknown> }>("/api/v3/teams", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateTeam: (teamId: string, body: {
+    name?: string;
+    description?: string;
+    leader_agent_id?: string;
+    default_strategy?: string;
+    strategy_config?: Record<string, unknown>;
+  }) =>
+    request<{ ok: boolean; team: Record<string, unknown> }>(
+      `/api/v3/teams/${encodeURIComponent(teamId)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+  deleteTeam: (teamId: string) =>
+    request<{ ok: boolean; deleted: boolean }>(
+      `/api/v3/teams/${encodeURIComponent(teamId)}`,
+      { method: "DELETE" },
+    ),
+  addTeamMember: (teamId: string, agentId: string, role?: string) =>
+    request<{ ok: boolean }>(
+      `/api/v3/teams/${encodeURIComponent(teamId)}/members`,
+      { method: "POST", body: JSON.stringify({ agent_id: agentId, role: role || "member" }) },
+    ),
+  removeTeamMember: (teamId: string, agentId: string) =>
+    request<{ ok: boolean; removed: boolean }>(
+      `/api/v3/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(agentId)}`,
+      { method: "DELETE" },
+    ),
+
+  listLoops: (enabledOnly?: boolean) => {
+    const q = enabledOnly !== undefined ? `?enabled=${enabledOnly}` : "";
+    return request<{ count: number; loops: Record<string, unknown>[] }>(`/api/v3/loops${q}`);
+  },
+  createLoop: (body: {
+    name: string;
+    description?: string;
+    module_path: string;
+    config_schema?: Record<string, unknown>;
+    is_system?: boolean;
+  }) =>
+    request<{ ok: boolean; loop: Record<string, unknown> }>("/api/v3/loops", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateLoop: (loopId: string, body: {
+    description?: string;
+    config_schema?: Record<string, unknown>;
+    enabled?: boolean;
+  }) =>
+    request<{ ok: boolean; loop: Record<string, unknown> }>(
+      `/api/v3/loops/${encodeURIComponent(loopId)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+  deleteLoop: (loopId: string) =>
+    request<{ ok: boolean; deleted: boolean }>(
+      `/api/v3/loops/${encodeURIComponent(loopId)}`,
+      { method: "DELETE" },
+    ),
+
+  listStrategies: (enabledOnly?: boolean) => {
+    const q = enabledOnly !== undefined ? `?enabled=${enabledOnly}` : "";
+    return request<{ count: number; strategies: Record<string, unknown>[] }>(`/api/v3/strategies${q}`);
+  },
+  createStrategy: (body: {
+    name: string;
+    description?: string;
+    module_path: string;
+    config_schema?: Record<string, unknown>;
+    is_system?: boolean;
+  }) =>
+    request<{ ok: boolean; strategy: Record<string, unknown> }>("/api/v3/strategies", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateStrategy: (strategyId: string, body: {
+    description?: string;
+    config_schema?: Record<string, unknown>;
+    enabled?: boolean;
+  }) =>
+    request<{ ok: boolean; strategy: Record<string, unknown> }>(
+      `/api/v3/strategies/${encodeURIComponent(strategyId)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+  deleteStrategy: (strategyId: string) =>
+    request<{ ok: boolean; deleted: boolean }>(
+      `/api/v3/strategies/${encodeURIComponent(strategyId)}`,
+      { method: "DELETE" },
+    ),
+
+  listEnvironments: (enabledOnly?: boolean) => {
+    const q = enabledOnly !== undefined ? `?enabled=${enabledOnly}` : "";
+    return request<{ count: number; environments: Record<string, unknown>[] }>(`/api/v3/environments${q}`);
+  },
+  createEnvironment: (body: {
+    name: string;
+    description?: string;
+    sandbox_type?: string;
+    sandbox_config?: Record<string, unknown>;
+    resource_limits?: Record<string, unknown>;
+    allowed_tools?: string[];
+    denied_tools?: string[];
+    max_rounds?: number;
+    timeout_seconds?: number;
+  }) =>
+    request<{ ok: boolean; environment: Record<string, unknown> }>("/api/v3/environments", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateEnvironment: (envId: string, body: {
+    name?: string;
+    description?: string;
+    sandbox_type?: string;
+    sandbox_config?: Record<string, unknown>;
+    resource_limits?: Record<string, unknown>;
+    allowed_tools?: string[];
+    denied_tools?: string[];
+    max_rounds?: number;
+    timeout_seconds?: number;
+    enabled?: boolean;
+  }) =>
+    request<{ ok: boolean; environment: Record<string, unknown> }>(
+      `/api/v3/environments/${encodeURIComponent(envId)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+  deleteEnvironment: (envId: string) =>
+    request<{ ok: boolean; deleted: boolean }>(
+      `/api/v3/environments/${encodeURIComponent(envId)}`,
+      { method: "DELETE" },
+    ),
+
+  dispatchTask: (body: {
+    task: string;
+    target?: { type: string; id: string };
+    strategy?: string;
+    strategy_config?: Record<string, unknown>;
+    environment_id?: string;
+    loop?: { name: string; config?: Record<string, unknown> };
+    timeout_seconds?: number;
+  }) =>
+    request<{ ok: boolean; execution_id: string; status: string }>("/api/v3/dispatch", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getDispatchStatus: (executionId: string) =>
+    request<{ execution_id: string; status: string; message?: string }>(
+      `/api/v3/dispatch/${encodeURIComponent(executionId)}`,
+    ),
+
+  // ============ Agent Image API (智能体镜像) ============
+  listAgentImages: (enabledOnly?: boolean) => {
+    const q = enabledOnly !== undefined ? `?enabled=${enabledOnly}` : "";
+    return request<{ count: number; images: Record<string, unknown>[] }>(`/api/v3/images${q}`);
+  },
+  createAgentImage: (body: {
+    name: string;
+    description?: string;
+    agent_ids?: string[];
+    loop_id?: string;
+    strategy_id?: string;
+    strategy_config?: Record<string, unknown>;
+    environment_id?: string;
+  }) =>
+    request<{ ok: boolean; image: Record<string, unknown> }>("/api/v3/images", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getAgentImage: (imageId: string) =>
+    request<Record<string, unknown>>(`/api/v3/images/${encodeURIComponent(imageId)}`),
+  updateAgentImage: (imageId: string, body: {
+    name?: string;
+    description?: string;
+    agent_ids?: string[];
+    loop_id?: string;
+    strategy_id?: string;
+    strategy_config?: Record<string, unknown>;
+    environment_id?: string;
+    enabled?: boolean;
+  }) =>
+    request<{ ok: boolean; image: Record<string, unknown> }>(
+      `/api/v3/images/${encodeURIComponent(imageId)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+  deleteAgentImage: (imageId: string) =>
+    request<{ ok: boolean; deleted: boolean }>(
+      `/api/v3/images/${encodeURIComponent(imageId)}`,
+      { method: "DELETE" },
+    ),
+
+  // ============ Agent Instance API (智能体实例) ============
+  listAgentInstances: (enabledOnly?: boolean) => {
+    const q = enabledOnly !== undefined ? `?enabled=${enabledOnly}` : "";
+    return request<{ count: number; instances: Record<string, unknown>[] }>(`/api/v3/instances${q}`);
+  },
+  createAgentInstance: (body: {
+    name: string;
+    description?: string;
+    image_id: string;
+    model_name?: string;
+    runtime_config?: Record<string, unknown>;
+  }) =>
+    request<{ ok: boolean; instance: Record<string, unknown> }>("/api/v3/instances", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getAgentInstance: (instanceId: string) =>
+    request<Record<string, unknown>>(`/api/v3/instances/${encodeURIComponent(instanceId)}`),
+  updateAgentInstance: (instanceId: string, body: {
+    name?: string;
+    description?: string;
+    image_id?: string;
+    model_name?: string;
+    runtime_config?: Record<string, unknown>;
+    enabled?: boolean;
+  }) =>
+    request<{ ok: boolean; instance: Record<string, unknown> }>(
+      `/api/v3/instances/${encodeURIComponent(instanceId)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+  deleteAgentInstance: (instanceId: string) =>
+    request<{ ok: boolean; deleted: boolean }>(
+      `/api/v3/instances/${encodeURIComponent(instanceId)}`,
+      { method: "DELETE" },
+    ),
+  startAgentInstance: (instanceId: string) => {
+    const config = { method: "POST" as const, body: JSON.stringify({}) };
+    return request<{ ok: boolean; instance: Record<string, unknown> }>(
+      `/api/v3/instances/${encodeURIComponent(instanceId)}/start`,
+      config,
+    );
+  },
+  stopAgentInstance: (instanceId: string) => {
+    const config = { method: "POST" as const, body: JSON.stringify({}) };
+    return request<{ ok: boolean; instance: Record<string, unknown> }>(
+      `/api/v3/instances/${encodeURIComponent(instanceId)}/stop`,
+      config,
+    );
+  },
 };

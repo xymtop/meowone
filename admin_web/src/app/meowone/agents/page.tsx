@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { meowoneApi, type AgentsListResponse } from "@/lib/meowone-api";
 
@@ -86,7 +86,7 @@ type AgentCard = {
   system_prompt?: string;
 };
 
-export default function AgentsPage() {
+function AgentsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const param = searchParams.get("agent_type");
@@ -123,7 +123,7 @@ export default function AgentsPage() {
   const filteredAgents = allAgents.filter((a) => {
     const name = String(a.name ?? "");
     const desc = String(a.description ?? "");
-    const typ = String(a.agent_type ?? a.type ?? "");
+    const typ = String(a.agent_type ?? "");
     return keyword.trim()
       ? [name, desc, typ].join(" ").toLowerCase().includes(keyword.trim().toLowerCase())
       : true;
@@ -216,7 +216,7 @@ export default function AgentsPage() {
       {!loading && filteredAgents.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredAgents.map((a) => {
-            const typ = String(a.agent_type ?? a.type ?? "?");
+            const typ = String(a.agent_type ?? "?");
             const nm = String(a.name ?? "");
             const mcpCount = Array.isArray(a.mcp_servers) ? a.mcp_servers.length : 0;
             const skillCount = Array.isArray(a.agent_skills) ? a.agent_skills.length : 0;
@@ -283,19 +283,28 @@ export default function AgentsPage() {
 
                   {/* 操作按钮 */}
                   <div className="mt-4 flex items-center gap-2">
+                    {typ === "external" ? (
+                      <Link
+                        href={`/meowone/agents/create/external?edit=${encodeURIComponent(nm)}`}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-100"
+                      >
+                        <SettingsIcon />
+                        配置
+                      </Link>
+                    ) : (
+                      <Link
+                        href={`/meowone/agents/${typ}/${nm}`}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-100"
+                      >
+                        <SettingsIcon />
+                        配置
+                      </Link>
+                    )}
                     <Link
-                      href={`/meowone/chat?agent=${encodeURIComponent(nm)}`}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-100"
+                      href={`/meowone/images/create`}
+                      className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-green-600 transition-colors hover:bg-green-50"
                     >
-                      <ChatIcon />
-                      对话
-                    </Link>
-                    <Link
-                      href={`/meowone/agents/${encodeURIComponent(typ)}/${encodeURIComponent(nm)}`}
-                      className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
-                    >
-                      <SettingsIcon />
-                      配置
+                      创建镜像
                     </Link>
                     <button
                       type="button"
@@ -342,5 +351,37 @@ export default function AgentsPage() {
         </ul>
       </div>
     </div>
+  );
+}
+
+function AgentsLoading() {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="h-8 w-40 animate-pulse rounded bg-gray-200" />
+          <div className="mt-1 h-4 w-64 animate-pulse rounded bg-gray-200" />
+        </div>
+        <div className="h-10 w-32 animate-pulse rounded-xl bg-gray-200" />
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="h-9 w-20 animate-pulse rounded-lg bg-gray-200" />
+        <div className="h-9 w-20 animate-pulse rounded-lg bg-gray-200" />
+        <div className="h-9 w-20 animate-pulse rounded-lg bg-gray-200" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-64 animate-pulse rounded-2xl bg-gray-200" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function AgentsPage() {
+  return (
+    <Suspense fallback={<AgentsLoading />}>
+      <AgentsContent />
+    </Suspense>
   );
 }

@@ -250,6 +250,16 @@ async def upsert_skill(
         await db.commit()
 
 
+async def set_skill_enabled(name: str, enabled: bool) -> bool:
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE skills SET enabled = ? WHERE name = ?",
+            (1 if enabled else 0, name),
+        )
+        await db.commit()
+        return True
+
+
 async def delete_skill(name: str) -> bool:
     async with get_db() as db:
         cur = await db.execute("DELETE FROM skills WHERE name = ?", (name,))

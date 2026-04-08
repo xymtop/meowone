@@ -2,13 +2,13 @@
 
 import { A2UIProvider, A2UIRenderer, standardCatalog, useDataBinding, useDispatchAction, type A2UIAction } from "@a2ui-sdk/react/0.8";
 import type { A2UIMessage } from "@a2ui-sdk/types/0.8";
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Markdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
-import { meowoneApi, type AgentsListResponse, type ChatEvent, type Message, type Session } from "@/lib/meowone-api";
+import { meowoneApi, type ChatEvent, type Message, type Session } from "@/lib/meowone-api";
 import { cn } from "@/lib/utils";
 
 type Segment = { type: "markdown" | "a2ui" | "mermaid"; value: string };
@@ -585,7 +585,7 @@ function CopyMessageButton({ text, variant }: { text: string; variant: "user" | 
   );
 }
 
-// ============ 新增图标组件 ============
+// ============ 图标组件 ============
 function PlusIcon() {
   return (
     <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -665,27 +665,24 @@ function ChevronDownIcon() {
   );
 }
 
-function RobotIcon() {
+function ServerIcon() {
   return (
     <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
     </svg>
   );
 }
 
-// ============ Agent 选择器组件 ============
-// MeowOne 默认智能体（不传递 agent_name 时使用）
-const MEOWONE_DEFAULT_AGENT = "__meowone_default__";
-
-function AgentSelector({
-  agents,
-  selectedAgentId,
+// ============ 实例选择器组件 ============
+function InstanceSelector({
+  instances,
+  selectedInstanceId,
   onSelect,
   onCreateNew,
   onManageAll,
 }: {
-  agents: { id: string; name: string; description?: string; agent_type?: string }[];
-  selectedAgentId: string;
+  instances: { id: string; name: string; description?: string; status?: string }[];
+  selectedInstanceId: string;
   onSelect: (id: string) => void;
   onCreateNew: () => void;
   onManageAll?: () => void;
@@ -694,9 +691,15 @@ function AgentSelector({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const getDisplayName = () => {
-    if (selectedAgentId === MEOWONE_DEFAULT_AGENT) return "MeowOne";
-    const currentAgent = agents.find((a) => a.id === selectedAgentId);
-    return currentAgent?.name || "选择智能体";
+    if (!selectedInstanceId) return "选择实例";
+    const currentInstance = instances.find((i) => i.id === selectedInstanceId);
+    return currentInstance?.name || "选择实例";
+  };
+
+  const getInstanceStatus = () => {
+    if (!selectedInstanceId) return null;
+    const currentInstance = instances.find((i) => i.id === selectedInstanceId);
+    return currentInstance?.status;
   };
 
   useEffect(() => {
@@ -709,8 +712,8 @@ function AgentSelector({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const internalAgents = agents.filter((a) => a.agent_type === "internal" || !a.agent_type);
-  const externalAgents = agents.filter((a) => a.agent_type === "external");
+  const runningInstances = instances.filter((i) => i.status === "running");
+  const stoppedInstances = instances.filter((i) => i.status !== "running");
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -719,63 +722,42 @@ function AgentSelector({
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-sm transition-colors hover:bg-gray-50"
       >
-        <RobotIcon />
+        <ServerIcon />
         <span className="font-medium">{getDisplayName()}</span>
+        {getInstanceStatus() === "running" && (
+          <span className="h-2 w-2 rounded-full bg-green-500" />
+        )}
         <ChevronDownIcon />
       </button>
 
       {isOpen && (
         <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-xl border border-gray-200 bg-white shadow-lg">
           <div className="max-h-80 overflow-y-auto p-1">
-            <button
-              onClick={() => {
-                onSelect(MEOWONE_DEFAULT_AGENT);
-                setIsOpen(false);
-              }}
-              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-colors ${
-                selectedAgentId === MEOWONE_DEFAULT_AGENT
-                  ? "bg-blue-50 text-blue-600"
-                  : "hover:bg-gray-50"
-              }`}
-            >
-              <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                <RobotIcon />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">MeowOne</p>
-                <p className="truncate text-xs text-gray-500">默认智能体，使用系统配置</p>
-              </div>
-              {selectedAgentId === MEOWONE_DEFAULT_AGENT && (
-                <span className="size-2 shrink-0 rounded-full bg-blue-500" />
-              )}
-            </button>
-
-            {(internalAgents.length > 0 || externalAgents.length > 0) && (
-              <div className="my-2 border-t border-gray-100" />
-            )}
-
-            {internalAgents.length > 0 && (
+            {runningInstances.length > 0 && (
               <>
-                <div className="px-3 py-1 text-xs font-medium text-gray-400">内部智能体</div>
-                {internalAgents.map((agent) => (
+                <div className="px-3 py-1 text-xs font-medium text-gray-400">运行中</div>
+                {runningInstances.map((inst) => (
                   <button
-                    key={agent.id}
+                    key={inst.id}
                     onClick={() => {
-                      onSelect(agent.id);
+                      onSelect(inst.id);
                       setIsOpen(false);
                     }}
                     className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
-                      agent.id === selectedAgentId
+                      inst.id === selectedInstanceId
                         ? "bg-blue-50 text-blue-600"
                         : "hover:bg-gray-50"
                     }`}
                   >
-                    <RobotIcon />
+                    <ServerIcon />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{agent.name}</p>
-                      <p className="truncate text-xs text-gray-500">{agent.description || "暂无描述"}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-medium">{inst.name}</p>
+                        <span className="h-2 w-2 rounded-full bg-green-500" />
+                      </div>
+                      <p className="truncate text-xs text-gray-500">{inst.description || "暂无描述"}</p>
                     </div>
-                    {agent.id === selectedAgentId && (
+                    {inst.id === selectedInstanceId && (
                       <span className="size-2 shrink-0 rounded-full bg-blue-500" />
                     )}
                   </button>
@@ -783,33 +765,40 @@ function AgentSelector({
               </>
             )}
 
-            {externalAgents.length > 0 && (
+            {stoppedInstances.length > 0 && (
               <>
-                <div className="px-3 py-1 text-xs font-medium text-gray-400">外部智能体</div>
-                {externalAgents.map((agent) => (
+                <div className="my-2 border-t border-gray-100" />
+                <div className="px-3 py-1 text-xs font-medium text-gray-400">已停止</div>
+                {stoppedInstances.map((inst) => (
                   <button
-                    key={agent.id}
+                    key={inst.id}
                     onClick={() => {
-                      onSelect(agent.id);
+                      onSelect(inst.id);
                       setIsOpen(false);
                     }}
                     className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
-                      agent.id === selectedAgentId
+                      inst.id === selectedInstanceId
                         ? "bg-blue-50 text-blue-600"
                         : "hover:bg-gray-50"
                     }`}
                   >
-                    <RobotIcon />
+                    <ServerIcon />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{agent.name}</p>
-                      <p className="truncate text-xs text-gray-500">{agent.description || "暂无描述"}</p>
+                      <p className="truncate font-medium">{inst.name}</p>
+                      <p className="truncate text-xs text-gray-500">{inst.description || "暂无描述"}</p>
                     </div>
-                    {agent.id === selectedAgentId && (
+                    {inst.id === selectedInstanceId && (
                       <span className="size-2 shrink-0 rounded-full bg-blue-500" />
                     )}
                   </button>
                 ))}
               </>
+            )}
+
+            {instances.length === 0 && (
+              <div className="p-4 text-center text-sm text-gray-500">
+                还没有实例
+              </div>
             )}
           </div>
           <div className="border-t border-gray-100 p-1">
@@ -821,7 +810,7 @@ function AgentSelector({
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-blue-600 transition-colors hover:bg-blue-50"
             >
               <PlusIcon />
-              创建新智能体
+              创建新实例
             </button>
             {onManageAll && (
               <button
@@ -831,8 +820,8 @@ function AgentSelector({
                 }}
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
               >
-                <RobotIcon />
-                管理所有智能体
+                <ServerIcon />
+                管理所有实例
               </button>
             )}
           </div>
@@ -843,21 +832,18 @@ function AgentSelector({
 }
 
 // ============ 主组件 ============
-type AgentInfo = {
+type InstanceInfo = {
   id: string;
   name: string;
   description?: string;
-  agent_type?: string;
-  mcp_servers?: string[];
-  agent_skills?: string[];
-  enabled?: boolean;
+  status?: string;
+  image_id?: string;
   model_name?: string;
-  scheduler_mode?: string;
 };
 
-export default function MeowChatPage() {
+function ChatContent() {
   const searchParams = useSearchParams();
-  const paramAgent = searchParams.get("agent");
+  const paramInstance = searchParams.get("instance");
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState("");
@@ -876,48 +862,29 @@ export default function MeowChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composingRef = useRef(false);
 
-  // Agent 相关状态
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
-  // MeowOne 默认智能体（不传 agent_name）
-  const [selectedAgentId, setSelectedAgentId] = useState<string>(paramAgent ? paramAgent : "__meowone_default__");
-  const [selectedAgentName, setSelectedAgentName] = useState<string | undefined>(undefined);
-  const [selectedAgentType, setSelectedAgentType] = useState<string | undefined>(undefined);
-  // 模型和调度配置
-  const [modelName, setModelName] = useState<string>("未配置");
-  const [schedulerMode, setSchedulerMode] = useState<string>("direct");
-  const [modelList, setModelList] = useState<Record<string, unknown>[]>([]);
-  // 可编辑模式（默认智能体时可编辑模型和调度）
-  const [isConfigEditable, setIsConfigEditable] = useState(true);
+  // 实例相关状态
+  const [instances, setInstances] = useState<InstanceInfo[]>([]);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>(paramInstance ? paramInstance : "");
+  const [selectedInstance, setSelectedInstance] = useState<InstanceInfo | null>(null);
 
-  const loadAgents = useCallback(async () => {
+  const loadInstances = useCallback(async () => {
     try {
-      const [internalRes, externalRes] = await Promise.all([
-        meowoneApi.listAgents("internal"),
-        meowoneApi.listAgents("external"),
-      ]);
-      const internalList = (internalRes.agents || []) as AgentInfo[];
-      const externalList = (externalRes.agents || []) as AgentInfo[];
-      const allAgents = [...internalList, ...externalList];
-      setAgents(allAgents);
+      const res = await meowoneApi.listAgentInstances();
+      const instList = (res.instances || []) as InstanceInfo[];
+      setInstances(instList);
       
-      // URL ?agent= 支持 id 或 name
-      if (paramAgent) {
-        const found =
-          allAgents.find((a) => a.id === paramAgent) || allAgents.find((a) => a.name === paramAgent);
+      // URL ?instance= 支持
+      if (paramInstance) {
+        const found = instList.find((i) => i.id === paramInstance);
         if (found) {
-          setSelectedAgentId(found.id);
-          setSelectedAgentName(found.name);
-          setSelectedAgentType(found.agent_type);
-          setIsConfigEditable(false);
-          if (found.model_name) setModelName(String(found.model_name));
-          setSchedulerMode("direct");
+          setSelectedInstanceId(found.id);
+          setSelectedInstance(found);
         }
       }
     } catch (e) {
-      console.error("加载智能体失败:", e);
+      console.error("加载实例失败:", e);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [paramInstance]);
 
   const loadSessions = async () => {
     const list = await meowoneApi.listSessions();
@@ -926,21 +893,9 @@ export default function MeowChatPage() {
   };
 
   useEffect(() => {
-    void loadAgents();
+    void loadInstances();
     loadSessions().catch((e: Error) => setError(e.message));
-    meowoneApi
-      .listModels()
-      .then((res) => {
-        const found = (res.models || []).find((m) => Boolean((m as Record<string, unknown>).is_default));
-        const defaultModel = String((found as Record<string, unknown> | undefined)?.name || "未配置");
-        setModelList(res.models || []);
-        if (!modelName || modelName === "未配置") {
-          setModelName(defaultModel);
-        }
-      })
-      .catch(() => setModelName("未配置"));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadInstances]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -998,6 +953,13 @@ export default function MeowChatPage() {
 
   const send = async () => {
     if (!prompt.trim() || loading) return;
+    
+    // 检查是否选择了实例
+    if (!selectedInstanceId) {
+      setError("请先选择一个实例");
+      return;
+    }
+
     const text = prompt.trim();
     let targetSessionId = sessionId;
     if (!targetSessionId) {
@@ -1027,22 +989,11 @@ export default function MeowChatPage() {
       },
     ]);
     try {
-      // 确定 agent 参数：MeowOne 默认不传，其他智能体需要传 agent_name 和 agent_type
-      const isMeowOne = selectedAgentId === "__meowone_default__";
-      const sel = agents.find((a) => a.id === selectedAgentId);
-      const agentName = isMeowOne ? undefined : sel?.name;
-      const agentType = isMeowOne ? undefined : (sel?.agent_type || "internal");
-      const agentId = isMeowOne ? undefined : selectedAgentId;
-      const sched = isMeowOne ? schedulerMode : "direct";
-
       await meowoneApi.streamChat(targetSessionId, { 
         content: text, 
         channel_id: "web",
-        agent_name: agentName,
-        agent_type: agentType,
-        agent_id: agentId,
-        scheduler_mode: sched,
-        model_name: isMeowOne ? modelName : undefined,
+        // 实例对话使用 instance_id
+        agent_id: selectedInstanceId,
       }, onStreamEvent, {
         signal: controller.signal,
       });
@@ -1061,7 +1012,7 @@ export default function MeowChatPage() {
   };
 
   const handleA2UIAction = async (action: A2UIAction) => {
-    if (!sessionId || loading) return;
+    if (!sessionId || loading || !selectedInstanceId) return;
     const controller = new AbortController();
     abortRef.current = controller;
     setStreaming("");
@@ -1069,24 +1020,14 @@ export default function MeowChatPage() {
     setLoading(true);
     setThinking(null);
     setStreamingTools([]);
-    try {
-      const isMeowOne = selectedAgentId === "__meowone_default__";
-      const sel = agents.find((a) => a.id === selectedAgentId);
-      const agentName = isMeowOne ? undefined : sel?.name;
-      const agentType = isMeowOne ? undefined : (sel?.agent_type || "internal");
-      const agentId = isMeowOne ? undefined : selectedAgentId;
-      const sched = isMeowOne ? schedulerMode : "direct";
 
+    try {
       await meowoneApi.streamA2UIAction(
         sessionId,
         { 
           action: action as unknown as Record<string, unknown>, 
           channel_id: "web",
-          agent_name: agentName,
-          agent_type: agentType,
-          agent_id: agentId,
-          scheduler_mode: sched,
-          model_name: isMeowOne ? modelName : undefined,
+          agent_id: selectedInstanceId,
         },
         onStreamEvent,
         { signal: controller.signal },
@@ -1119,9 +1060,9 @@ export default function MeowChatPage() {
   };
 
   const currentTitle = sessions.find((s) => s.id === sessionId)?.title || "新对话";
-  const currentAgentInfo = agents.find((a) => a.id === selectedAgentId);
-  const currentAgentName = currentAgentInfo?.name;
-  const currentAgentType = currentAgentInfo?.agent_type || "internal";
+  const currentInstanceInfo = instances.find((i) => i.id === selectedInstanceId);
+  const currentInstanceName = currentInstanceInfo?.name;
+  const currentInstanceStatus = currentInstanceInfo?.status;
   const hasConversation = messages.length > 0 || Boolean(streaming);
   const suggestionPrompts = [
     "帮我总结一下今天的工作重点",
@@ -1129,6 +1070,13 @@ export default function MeowChatPage() {
     "用 Mermaid 画一个登录流程图",
     "生成一个 A2UI 示例界面",
   ];
+
+  const handleSelectInstance = (id: string) => {
+    setSelectedInstanceId(id);
+    const inst = instances.find((i) => i.id === id);
+    setSelectedInstance(inst || null);
+    setError("");
+  };
 
   return (
     <>
@@ -1294,88 +1242,46 @@ export default function MeowChatPage() {
       ) : null}
 
       <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
-        {/* Agent 选择栏 */}
+        {/* 实例选择栏 */}
         <div className="border-b border-[#e5e7eb] bg-white px-4 py-3">
           <div className="mx-auto flex w-full max-w-[760px] flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <AgentSelector
-                agents={agents}
-                selectedAgentId={selectedAgentId}
-                onSelect={(id) => {
-                  setSelectedAgentId(id);
-                  if (id === "__meowone_default__") {
-                    setSelectedAgentName(undefined);
-                    setSelectedAgentType(undefined);
-                    setIsConfigEditable(true);
-                    const defaultModel = modelList.find((m) => (m as Record<string, unknown>).is_default);
-                    setModelName(String((defaultModel as Record<string, unknown>)?.name || "未配置"));
-                    setSchedulerMode("direct");
-                    return;
-                  }
-                  const agent = agents.find((a) => a.id === id);
-                  if (agent) {
-                    setSelectedAgentName(agent.name);
-                    setSelectedAgentType(agent.agent_type);
-                    setIsConfigEditable(false);
-                    if (agent.model_name) setModelName(String(agent.model_name));
-                    setSchedulerMode("direct");
-                  }
-                }}
+              <InstanceSelector
+                instances={instances}
+                selectedInstanceId={selectedInstanceId}
+                onSelect={handleSelectInstance}
                 onCreateNew={() => {
-                  window.location.href = "/meowone/agents/create";
+                  window.location.href = "/meowone/instances/create";
                 }}
                 onManageAll={() => {
-                  window.location.href = "/meowone/agents";
+                  window.location.href = "/meowone/instances";
                 }}
               />
-              {currentAgentInfo && (
-                <div className="hidden items-center gap-2 text-xs text-[#6b7280] sm:flex">
-                  {currentAgentInfo.mcp_servers && currentAgentInfo.mcp_servers.length > 0 && (
-                    <span className="rounded-full bg-purple-100 px-2 py-0.5 text-purple-600">
-                      {currentAgentInfo.mcp_servers.length} MCP
-                    </span>
-                  )}
-                  {currentAgentInfo.agent_skills && currentAgentInfo.agent_skills.length > 0 && (
-                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-600">
-                      {currentAgentInfo.agent_skills.length} 技能
+              {currentInstanceInfo && (
+                <div className="flex items-center gap-2 text-xs text-[#6b7280]">
+                  <span className={`rounded-full px-2 py-0.5 ${
+                    currentInstanceStatus === "running" 
+                      ? "bg-green-100 text-green-600" 
+                      : "bg-gray-100 text-gray-500"
+                  }`}>
+                    {currentInstanceStatus === "running" ? "运行中" : "已停止"}
+                  </span>
+                  {currentInstanceInfo.model_name && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-600">
+                      {currentInstanceInfo.model_name}
                     </span>
                   )}
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2 text-[12px] text-[#6b7280]">
-              {isConfigEditable ? (
-                <>
-                  <select
-                    value={modelName}
-                    onChange={(e) => setModelName(e.target.value)}
-                    className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5 text-[#6b7280]"
-                  >
-                    {modelList.map((m) => (
-                      <option key={String((m as Record<string, unknown>).name)} value={String((m as Record<string, unknown>).name)}>
-                        {String((m as Record<string, unknown>).name)}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={schedulerMode}
-                    onChange={(e) => setSchedulerMode(e.target.value)}
-                    className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5 text-[#6b7280]"
-                  >
-                    <option value="direct">direct</option>
-                    <option value="loop">loop</option>
-                    <option value="swarm">swarm</option>
-                  </select>
-                </>
-              ) : (
-                <>
-                  <span className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5">
-                    模型: {modelName}
-                  </span>
-                  <span className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5">
-                    调度: {schedulerMode}
-                  </span>
-                </>
+            <div className="text-[12px] text-[#6b7280]">
+              {!selectedInstanceId && instances.length > 0 && (
+                <span className="text-amber-600">请选择一个实例开始对话</span>
+              )}
+              {!selectedInstanceId && instances.length === 0 && (
+                <Link href="/meowone/instances/create" className="text-blue-500 hover:underline">
+                  创建第一个实例
+                </Link>
               )}
             </div>
           </div>
@@ -1408,29 +1314,25 @@ export default function MeowChatPage() {
             {!hasConversation ? (
               <div className="px-2 pb-10 pt-8 text-center sm:pt-14">
                 <div className="mb-6 flex size-16 mx-auto items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white">
-                  <RobotIcon />
+                  <ServerIcon />
                 </div>
                 <h2 className="text-[32px] font-semibold tracking-tight text-[#1d2129]">
-                  {selectedAgentId === "__meowone_default__"
-                    ? "有什么我能帮你的吗？"
-                    : currentAgentName
-                    ? `与 ${currentAgentName} 对话`
+                  {currentInstanceName
+                    ? `与 ${currentInstanceName} 对话`
                     : "有什么我能帮你的吗？"}
                 </h2>
                 <p className="mt-3 text-[14px] text-[#86909c]">
-                  {selectedAgentId === "__meowone_default__"
-                    ? "使用 MeowOne 默认智能体开始对话"
-                    : currentAgentName
-                    ? "开始对话，测试你的智能体"
-                    : "请先选择一个智能体或创建一个新的"}
+                  {currentInstanceName
+                    ? "开始对话，测试你的实例"
+                    : "请先选择一个实例或创建一个新的"}
                 </p>
-                {!currentAgentName && agents.length === 0 && (
+                {!currentInstanceName && instances.length === 0 && (
                   <Link
-                    href="/meowone/agents/create"
+                    href="/meowone/instances/create"
                     className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 font-medium text-white transition-all hover:from-blue-600 hover:to-purple-700"
                   >
                     <PlusIcon />
-                    创建第一个智能体
+                    创建第一个实例
                   </Link>
                 )}
                 <div className="mt-8 flex flex-wrap justify-center gap-2">
@@ -1572,10 +1474,10 @@ export default function MeowChatPage() {
                     setPrompt(e.target.value);
                     adjustTextareaHeight();
                   }}
-                  placeholder={currentAgentName ? "输入消息..." : "向MeowOne提问"}
+                  placeholder={currentInstanceName ? "输入消息..." : "选择实例后开始对话"}
                   rows={1}
-                  disabled={!currentAgentName && agents.length === 0}
-                  className="max-h-40 min-h-[48px] w-full resize-none border-0 bg-transparent py-2.5 text-[15px] font-normal leading-7 text-[#1d2129] antialiased outline-none placeholder:text-[#9aa0a6] placeholder:text-[14px]"
+                  disabled={!selectedInstanceId}
+                  className="max-h-40 min-h-[48px] w-full resize-none border-0 bg-transparent py-2.5 text-[15px] font-normal leading-7 text-[#1d2129] antialiased outline-none placeholder:text-[#9aa0a6] placeholder:text-[14px] disabled:cursor-not-allowed disabled:opacity-50"
                   onKeyDown={async (e) => {
                     if (composingRef.current || (e.nativeEvent as KeyboardEvent).isComposing) return;
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -1598,7 +1500,7 @@ export default function MeowChatPage() {
                   <button
                     type="button"
                     className="mb-0.5 flex size-10 items-center justify-center rounded-full bg-[#2f7dff] text-white disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={!prompt.trim() || loading}
+                    disabled={!prompt.trim() || loading || !selectedInstanceId}
                     onClick={send}
                     aria-label="发送"
                   >
@@ -1612,5 +1514,24 @@ export default function MeowChatPage() {
       </section>
     </div>
     </>
+  );
+}
+
+function ChatLoading() {
+  return (
+    <div className="flex h-full items-center justify-center bg-white">
+      <div className="flex flex-col items-center gap-3">
+        <div className="size-10 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+        <span className="text-sm text-gray-500">加载中...</span>
+      </div>
+    </div>
+  );
+}
+
+export default function MeowChatPage() {
+  return (
+    <Suspense fallback={<ChatLoading />}>
+      <ChatContent />
+    </Suspense>
   );
 }

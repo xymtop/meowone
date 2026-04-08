@@ -24,7 +24,7 @@ export const NAV_DATA: NavSection[] = [
     label: "工作区",
     items: [
       {
-        title: "快速开始",
+        title: "首页",
         url: "/meowone",
         icon: Icons.HomeIcon,
         items: [],
@@ -38,7 +38,7 @@ export const NAV_DATA: NavSection[] = [
     ],
   },
   {
-    label: "智能体",
+    label: "智能体管理",
     items: [
       {
         title: "我的智能体",
@@ -55,16 +55,44 @@ export const NAV_DATA: NavSection[] = [
     ],
   },
   {
-    label: "能力中心",
+    label: "智能体镜像",
     items: [
       {
-        title: "模型管理",
-        url: "/meowone/models",
+        title: "镜像列表",
+        url: "/meowone/images",
         icon: Icons.FourCircle,
         items: [],
       },
       {
-        title: "MCP 管理",
+        title: "创建镜像",
+        url: "/meowone/images/create",
+        icon: Icons.PieChart,
+        items: [],
+      },
+    ],
+  },
+  {
+    label: "智能体实例",
+    items: [
+      {
+        title: "实例列表",
+        url: "/meowone/instances",
+        icon: Icons.User,
+        items: [],
+      },
+      {
+        title: "创建实例",
+        url: "/meowone/instances/create",
+        icon: Icons.PieChart,
+        items: [],
+      },
+    ],
+  },
+  {
+    label: "基础配置",
+    items: [
+      {
+        title: "MCP 服务",
         url: "/meowone/capabilities-mcp",
         icon: Icons.Authentication,
         items: [],
@@ -77,8 +105,37 @@ export const NAV_DATA: NavSection[] = [
       },
       {
         title: "提示词管理",
-        url: "/meowone/config",
+        url: "/meowone/capabilities-prompts",
         icon: Icons.Alphabet,
+        items: [],
+      },
+      {
+        title: "模型配置",
+        url: "/meowone/models",
+        icon: Icons.FourCircle,
+        items: [],
+      },
+    ],
+  },
+  {
+    label: "调度配置",
+    items: [
+      {
+        title: "Loop 管理",
+        url: "/meowone/scheduler/loops",
+        icon: Icons.Calendar,
+        items: [],
+      },
+      {
+        title: "调度策略",
+        url: "/meowone/scheduler/strategies",
+        icon: Icons.PieChart,
+        items: [],
+      },
+      {
+        title: "执行环境",
+        url: "/meowone/scheduler/environments",
+        icon: Icons.FourCircle,
         items: [],
       },
     ],
@@ -91,54 +148,7 @@ export const NAV_DATA: NavSection[] = [
         url: "/meowone/sessions",
         icon: Icons.Table,
         items: [],
-      },
-      {
-        title: "消息记录",
-        url: "/meowone/messages",
-        icon: Icons.User,
-        items: [],
-      },
-      {
-        title: "网关日志",
-        url: "/meowone/gateway-logs",
-        icon: Icons.PieChart,
-        items: [],
-      },
-    ],
-  },
-  {
-    label: "高级",
-    items: [
-      {
-        title: "工作流编排",
-        url: "/meowone/workflows",
-        icon: Icons.Table,
-        items: [],
-      },
-      {
-        title: "任务管理",
-        url: "/meowone/tasks",
-        icon: Icons.Table,
-        items: [],
-      },
-      {
-        title: "系统监控",
-        url: "/meowone/monitoring",
-        icon: Icons.PieChart,
-        items: [],
-      },
-      {
-        title: "任务调度",
-        url: "/meowone/scheduled-tasks",
-        icon: Icons.Calendar,
-        items: [],
-      },
-      {
-        title: "内部智能体",
-        url: "/meowone/internal-agents",
-        icon: Icons.HomeIcon,
-        items: [],
-      },
+      }
     ],
   },
 ];

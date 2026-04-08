@@ -448,21 +448,7 @@ export default function QuickStartPage() {
               </div>
             </Link>
 
-            {/* 工作流 */}
-            <Link
-              href="/meowone/workflows"
-              className="group rounded-xl border border-gray-200 bg-white p-4 transition-all hover:border-gray-300 hover:shadow-sm"
-            >
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-orange-50 p-2 text-orange-600 group-hover:bg-orange-100">
-                  <WorkflowIcon />
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900">工作流</p>
-                  <p className="text-sm text-gray-500">编排多智能体</p>
-                </div>
-              </div>
-            </Link>
+    
 
             {/* 任务 */}
             <Link

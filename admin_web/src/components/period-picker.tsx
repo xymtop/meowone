@@ -2,7 +2,7 @@
 
 import { ChevronUpIcon } from "@/assets/icons";
 import { cn } from "@/lib/utils";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Dropdown, DropdownContent, DropdownTrigger } from "./ui/dropdown";
 
@@ -15,7 +15,7 @@ type PropsType<TItem> = {
 
 const PARAM_KEY = "selected_time_frame";
 
-export function PeriodPicker<TItem extends string>({
+function PeriodPickerContent<TItem extends string>({
   defaultValue,
   sectionKey,
   items,
@@ -71,6 +71,14 @@ export function PeriodPicker<TItem extends string>({
         </ul>
       </DropdownContent>
     </Dropdown>
+  );
+}
+
+export function PeriodPicker<TItem extends string>(props: PropsType<TItem>) {
+  return (
+    <Suspense fallback={<div className="h-8 w-full animate-pulse rounded-md bg-gray-200" />}>
+      <PeriodPickerContent {...props} />
+    </Suspense>
   );
 }
 

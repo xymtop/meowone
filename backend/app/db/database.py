@@ -264,6 +264,137 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status, created_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_name ON tasks (name);
+
+-- ============================================================
+-- MeowOne v3 新增表
+-- ============================================================
+
+-- 组织表
+CREATE TABLE IF NOT EXISTS organizations (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    parent_org_id TEXT REFERENCES organizations(id),
+    settings_json TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_organizations_parent
+ON organizations (parent_org_id);
+
+-- 团队表
+CREATE TABLE IF NOT EXISTS teams (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    parent_team_id TEXT REFERENCES teams(id),
+    leader_agent_id TEXT,
+    default_strategy TEXT DEFAULT 'direct',
+    strategy_config_json TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_teams_org ON teams (org_id);
+
+-- 团队成员关联表
+CREATE TABLE IF NOT EXISTS team_members (
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    role TEXT DEFAULT 'member',
+    joined_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (team_id, agent_id)
+);
+
+-- Loop 定义表
+CREATE TABLE IF NOT EXISTS loops (
+    id TEXT PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    description TEXT DEFAULT '',
+    module_path TEXT NOT NULL,
+    config_schema_json TEXT DEFAULT '{}',
+    is_system INTEGER DEFAULT 0,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 策略定义表
+CREATE TABLE IF NOT EXISTS strategies (
+    id TEXT PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    description TEXT DEFAULT '',
+    module_path TEXT NOT NULL,
+    config_schema_json TEXT DEFAULT '{}',
+    is_system INTEGER DEFAULT 0,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 环境表
+CREATE TABLE IF NOT EXISTS environments (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    sandbox_type TEXT DEFAULT 'native',
+    sandbox_config_json TEXT DEFAULT '{}',
+    resource_limits_json TEXT DEFAULT '{}',
+    allowed_tools_json TEXT DEFAULT '[]',
+    denied_tools_json TEXT DEFAULT '[]',
+    max_rounds INTEGER DEFAULT 10,
+    timeout_seconds INTEGER DEFAULT 300,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- MeowOne v3.1 智能体镜像表
+-- 镜像 = 选中的智能体列表 + 调度策略 + 执行环境
+-- ============================================================
+CREATE TABLE IF NOT EXISTS agent_images (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT DEFAULT '',
+    -- 选中的智能体列表（存储智能体ID）
+    agent_ids_json TEXT DEFAULT '[]',
+    -- 调度配置
+    loop_id TEXT REFERENCES loops(id),
+    strategy_id TEXT REFERENCES strategies(id),
+    strategy_config_json TEXT DEFAULT '{}',
+    environment_id TEXT REFERENCES environments(id),
+    -- 元数据
+    metadata_json TEXT DEFAULT '{}',
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- MeowOne v3.1 智能体实例表
+-- 实例 = 镜像的运行实体，在对话中实际使用
+-- ============================================================
+CREATE TABLE IF NOT EXISTS agent_instances (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT DEFAULT '',
+    image_id TEXT NOT NULL REFERENCES agent_images(id),  -- 关联的镜像
+    -- 运行时配置（可覆盖镜像配置）
+    model_name TEXT DEFAULT '',               -- 使用的模型
+    runtime_config_json TEXT DEFAULT '{}',   -- 运行时配置
+    status TEXT DEFAULT 'stopped',           -- stopped, running
+    metadata_json TEXT DEFAULT '{}',
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_images_name ON agent_images (name);
+CREATE INDEX IF NOT EXISTS idx_agent_instances_name ON agent_instances (name);
+CREATE INDEX IF NOT EXISTS idx_agent_instances_image ON agent_instances (image_id);
 """
 
 _INSERT_DEFAULT_USER = "INSERT OR IGNORE INTO users (id, username) VALUES ('default', 'user');"
@@ -276,6 +407,10 @@ async def init_db() -> None:
         await _migrate_agents_table(db)
         await _migrate_mcp_servers_table(db)
         await _migrate_skills_table(db)
+        await _migrate_v3_tables(db)
+        await _migrate_agent_images_table(db)
+        await _migrate_agent_instances_table(db)
+        await _seed_v3_system_records(db)
         await db.execute(_INSERT_DEFAULT_USER)
         await db.commit()
 
@@ -320,6 +455,204 @@ async def _migrate_skills_table(db: aiosqlite.Connection) -> None:
         await db.execute("ALTER TABLE skills ADD COLUMN examples TEXT DEFAULT '[]'")
     if "version" not in cols:
         await db.execute("ALTER TABLE skills ADD COLUMN version TEXT DEFAULT '1.0.0'")
+
+
+async def _migrate_v3_tables(db: aiosqlite.Connection) -> None:
+    """v3 新增表的迁移：为 agents 表添加 org_id, loop_id, environment_id, capabilities_json, load, status"""
+    cur = await db.execute("PRAGMA table_info(agents)")
+    rows = await cur.fetchall()
+    cols = {str(r[1]) for r in rows}
+    if "org_id" not in cols:
+        await db.execute("ALTER TABLE agents ADD COLUMN org_id TEXT")
+    if "loop_id" not in cols:
+        await db.execute("ALTER TABLE agents ADD COLUMN loop_id TEXT")
+    if "environment_id" not in cols:
+        await db.execute("ALTER TABLE agents ADD COLUMN environment_id TEXT")
+    if "capabilities_json" not in cols:
+        await db.execute("ALTER TABLE agents ADD COLUMN capabilities_json TEXT DEFAULT '[]'")
+    if "load" not in cols:
+        await db.execute("ALTER TABLE agents ADD COLUMN load INTEGER DEFAULT 0")
+    if "status" not in cols:
+        await db.execute("ALTER TABLE agents ADD COLUMN status TEXT DEFAULT 'online'")
+
+
+async def _migrate_agent_images_table(db: aiosqlite.Connection) -> None:
+    """agent_images 表的迁移：添加缺失的列"""
+    cur = await db.execute("PRAGMA table_info(agent_images)")
+    rows = await cur.fetchall()
+    cols = {str(r[1]) for r in rows}
+    
+    if "agent_ids_json" not in cols:
+        await db.execute("ALTER TABLE agent_images ADD COLUMN agent_ids_json TEXT DEFAULT '[]'")
+    if "loop_id" not in cols:
+        await db.execute("ALTER TABLE agent_images ADD COLUMN loop_id TEXT")
+    if "strategy_id" not in cols:
+        await db.execute("ALTER TABLE agent_images ADD COLUMN strategy_id TEXT")
+    if "strategy_config_json" not in cols:
+        await db.execute("ALTER TABLE agent_images ADD COLUMN strategy_config_json TEXT DEFAULT '{}'")
+    if "environment_id" not in cols:
+        await db.execute("ALTER TABLE agent_images ADD COLUMN environment_id TEXT")
+    if "metadata_json" not in cols:
+        await db.execute("ALTER TABLE agent_images ADD COLUMN metadata_json TEXT DEFAULT '{}'")
+    if "enabled" not in cols:
+        await db.execute("ALTER TABLE agent_images ADD COLUMN enabled INTEGER DEFAULT 1")
+
+
+async def _migrate_agent_instances_table(db: aiosqlite.Connection) -> None:
+    """agent_instances 表的迁移：添加缺失的列"""
+    cur = await db.execute("PRAGMA table_info(agent_instances)")
+    rows = await cur.fetchall()
+    cols = {str(r[1]) for r in rows}
+    
+    if "model_name" not in cols:
+        await db.execute("ALTER TABLE agent_instances ADD COLUMN model_name TEXT DEFAULT ''")
+    if "runtime_config_json" not in cols:
+        await db.execute("ALTER TABLE agent_instances ADD COLUMN runtime_config_json TEXT DEFAULT '{}'")
+    if "status" not in cols:
+        await db.execute("ALTER TABLE agent_instances ADD COLUMN status TEXT DEFAULT 'stopped'")
+    if "metadata_json" not in cols:
+        await db.execute("ALTER TABLE agent_instances ADD COLUMN metadata_json TEXT DEFAULT '{}'")
+    if "enabled" not in cols:
+        await db.execute("ALTER TABLE agent_instances ADD COLUMN enabled INTEGER DEFAULT 1")
+
+
+async def _seed_v3_system_records(db: aiosqlite.Connection) -> None:
+    """v3 初始化内置 Loop 和 Strategy 记录"""
+    import uuid
+
+    # 内置 Loop
+    built_in_loops = [
+        {
+            "id": str(uuid.uuid4()),
+            "name": "react",
+            "description": "标准 ReAct 模式：思考 → 行动 → 观察",
+            "module_path": "app.loops.react",
+            "config_schema_json": '{"max_steps": {"type": "integer", "default": 10}}',
+            "is_system": 1,
+            "enabled": 1,
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "plan_exec",
+            "description": "计划-执行分离：先规划再逐步执行",
+            "module_path": "app.loops.plan_exec",
+            "config_schema_json": '{"max_plan_depth": {"type": "integer", "default": 3}}',
+            "is_system": 1,
+            "enabled": 1,
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "multi_agent_debate",
+            "description": "多智能体辩论：多个候选者并行思考后投票",
+            "module_path": "app.loops.multi_agent_debate",
+            "config_schema_json": '{"candidates": {"type": "integer", "default": 3}}',
+            "is_system": 1,
+            "enabled": 1,
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "hierarchical",
+            "description": "层级式执行：上级规划，下级执行",
+            "module_path": "app.loops.hierarchical",
+            "config_schema_json": '{"levels": {"type": "integer", "default": 2}}',
+            "is_system": 1,
+            "enabled": 1,
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "critic",
+            "description": "批评-改进模式：生成 → 批评 → 改进",
+            "module_path": "app.loops.critic",
+            "config_schema_json": '{"max_iterations": {"type": "integer", "default": 3}}',
+            "is_system": 1,
+            "enabled": 1,
+        },
+    ]
+
+    for loop in built_in_loops:
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO loops (id, name, description, module_path, config_schema_json, is_system, enabled)
+            VALUES (:id, :name, :description, :module_path, :config_schema_json, :is_system, :enabled)
+            """,
+            loop,
+        )
+
+    # 内置 Strategy
+    built_in_strategies = [
+        {
+            "id": str(uuid.uuid4()),
+            "name": "direct",
+            "description": "直接执行：直接分发到指定目标",
+            "module_path": "app.scheduler.strategies.direct",
+            "config_schema_json": "{}",
+            "is_system": 1,
+            "enabled": 1,
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "round_robin",
+            "description": "轮询分配：负载均衡轮流分配任务",
+            "module_path": "app.scheduler.strategies.round_robin",
+            "config_schema_json": "{}",
+            "is_system": 1,
+            "enabled": 1,
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "capability_match",
+            "description": "能力匹配：根据任务需求匹配最佳智能体",
+            "module_path": "app.scheduler.strategies.capability_match",
+            "config_schema_json": '{"match_fields": {"type": "array", "default": ["capabilities"]}}',
+            "is_system": 1,
+            "enabled": 1,
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "team_dispatch",
+            "description": "团队分发：分解任务并分配给团队成员",
+            "module_path": "app.scheduler.strategies.team_dispatch",
+            "config_schema_json": '{"parallel": {"type": "boolean", "default": true}}',
+            "is_system": 1,
+            "enabled": 1,
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "hierarchical",
+            "description": "层级上报：任务逐级上报处理",
+            "module_path": "app.scheduler.strategies.hierarchical",
+            "config_schema_json": '{"levels": {"type": "integer", "default": 3}}',
+            "is_system": 1,
+            "enabled": 1,
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "auction",
+            "description": "竞拍模式：智能体竞争任务",
+            "module_path": "app.scheduler.strategies.auction",
+            "config_schema_json": '{"bidding_timeout": {"type": "integer", "default": 30}}',
+            "is_system": 1,
+            "enabled": 1,
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "name": "democratic",
+            "description": "民主协商：多个智能体协商后决策",
+            "module_path": "app.scheduler.strategies.democratic",
+            "config_schema_json": '{"quorum": {"type": "integer", "default": 3}}',
+            "is_system": 1,
+            "enabled": 1,
+        },
+    ]
+
+    for strategy in built_in_strategies:
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO strategies (id, name, description, module_path, config_schema_json, is_system, enabled)
+            VALUES (:id, :name, :description, :module_path, :config_schema_json, :is_system, :enabled)
+            """,
+            strategy,
+        )
 
 
 @asynccontextmanager

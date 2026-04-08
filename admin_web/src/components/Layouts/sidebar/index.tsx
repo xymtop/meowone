@@ -1,10 +1,10 @@
 "use client";
 
-import { Logo } from "@/components/logo";
+import { Suspense, useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Logo } from "@/components/logo";
 import { NAV_DATA, type NavItem } from "./data";
 import { ArrowLeftIcon, ChevronUp } from "./icons";
 import { MenuItem } from "./menu-item";
@@ -23,7 +23,7 @@ function isNavHrefActive(href: string, pathname: string, searchParams: URLSearch
   return true;
 }
 
-export function Sidebar() {
+function SidebarContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { setIsOpen, isOpen, isMobile, isRail, toggleSidebar } = useSidebarContext();
@@ -244,5 +244,31 @@ export function Sidebar() {
         </div>
       </aside>
     </>
+  );
+}
+
+function SidebarLoading() {
+  return (
+    <aside
+      className="shrink-0 overflow-hidden border-r border-[#e3e8f2] bg-[#f7f9fd] w-[290px] h-screen dark:border-[#23324e] dark:bg-[#13203a]"
+      aria-hidden="true"
+    >
+      <div className="flex h-full flex-col py-10 pl-[25px] pr-[7px]">
+        <div className="h-10 w-32 animate-pulse rounded-xl bg-gray-200" />
+        <div className="mt-6 space-y-4 pr-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-200" />
+          ))}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+export function Sidebar() {
+  return (
+    <Suspense fallback={<SidebarLoading />}>
+      <SidebarContent />
+    </Suspense>
   );
 }

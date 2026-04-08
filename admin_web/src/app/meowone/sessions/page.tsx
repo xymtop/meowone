@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { meowoneApi, type Message, type Session } from "@/lib/meowone-api";
 
-export default function MeowSessionsPage() {
+function SessionsContent() {
   const searchParams = useSearchParams();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -152,6 +152,33 @@ export default function MeowSessionsPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+function SessionsLoading() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="h-8 w-40 animate-pulse rounded bg-gray-200" />
+        <div className="mt-1 h-4 w-80 animate-pulse rounded bg-gray-200" />
+      </div>
+      <div className="flex gap-3">
+        <div className="h-10 w-full max-w-md animate-pulse rounded-lg bg-gray-200" />
+        <div className="h-10 w-24 animate-pulse rounded-lg bg-gray-200" />
+      </div>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="h-96 animate-pulse rounded-xl bg-gray-200" />
+        <div className="h-96 animate-pulse rounded-xl bg-gray-200" />
+      </div>
+    </div>
+  );
+}
+
+export default function MeowSessionsPage() {
+  return (
+    <Suspense fallback={<SessionsLoading />}>
+      <SessionsContent />
+    </Suspense>
   );
 }
 

@@ -185,3 +185,18 @@ async def get_agent_card(name: str) -> Dict[str, Any]:
             ],
         },
     }
+
+
+@router.get("/external/{name}")
+async def get_external_agent(name: str) -> Dict[str, Any]:
+    """获取外部智能体完整配置（不含 Agent Card，Card 用 /external/{name}/card）"""
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    items = await agent_service.list_agents(agent_type="external")
+    agent = next((a for a in items if a.get("name") == name), None)
+
+    if agent is None:
+        raise HTTPException(status_code=404, detail=f"External agent '{name}' not found")
+    return agent
