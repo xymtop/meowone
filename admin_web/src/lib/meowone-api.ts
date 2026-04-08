@@ -142,6 +142,73 @@ export type GatewayLogsResponse = {
   nextCursor: number;
 };
 
+// ============ 工作流类型 ============
+export type WorkflowNode = {
+  id: string;
+  agent_name: string;
+  agent_type: string;
+  depends_on: string[];
+  input_mapping: Record<string, string>;
+  config: Record<string, unknown>;
+};
+
+export type Workflow = {
+  id: string;
+  name: string;
+  description?: string;
+  strategy: string;
+  nodes?: WorkflowNode[];
+  node_count?: number;
+  enabled?: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type WorkflowListResponse = { count: number; workflows: Workflow[] };
+
+export type WorkflowDetailResponse = { found: boolean; workflow: Workflow };
+
+export type WorkflowExecution = {
+  id: string;
+  workflow_id: string;
+  workflow_name: string;
+  status: string;
+  inputs?: Record<string, unknown>;
+  outputs?: Record<string, unknown>;
+  error_message?: string;
+  node_results?: Record<string, unknown>[];
+  started_at?: string;
+  completed_at?: string;
+  duration_ms?: number;
+  created_at?: string;
+};
+
+export type WorkflowExecutionsResponse = { count: number; executions: WorkflowExecution[] };
+
+// ============ 任务类型 ============
+export type Task = {
+  id: string;
+  name: string;
+  task_type: string;
+  status: string;
+  input_data?: Record<string, unknown>;
+  output_data?: Record<string, unknown>;
+  agent_name?: string;
+  agent_type?: string;
+  error_message?: string;
+  parent_task_id?: string;
+  metadata?: Record<string, unknown>;
+  priority?: number;
+  started_at?: string;
+  completed_at?: string;
+  duration_ms?: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type TaskListResponse = { total: number; limit: number; offset: number; tasks: Task[] };
+export type TaskDetailResponse = { found: boolean; task: Task };
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
@@ -473,4 +540,98 @@ export const meowoneApi = {
     const q = sp.toString();
     return request<GatewayLogsResponse>(`/api/gateway/logs${q ? `?${q}` : ""}`);
   },
+
+  // ============ 工作流 API ============
+  listWorkflows: () => request<WorkflowListResponse>("/api/workflows"),
+  createWorkflow: (body: {
+    name: string;
+    description?: string;
+    nodes: WorkflowNode[];
+    strategy?: string;
+    timeout_seconds?: number;
+  }) =>
+    request<{ ok: boolean; id: string; name: string }>("/api/workflows", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getWorkflow: (workflowIdOrName: string) =>
+    request<WorkflowDetailResponse>(`/api/workflows/${encodeURIComponent(workflowIdOrName)}`),
+  updateWorkflow: (workflowIdOrName: string, body: {
+    name: string;
+    description?: string;
+    nodes: WorkflowNode[];
+    strategy?: string;
+  }) =>
+    request<{ ok: boolean; id: string; name: string }>(
+      `/api/workflows/${encodeURIComponent(workflowIdOrName)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    ),
+  deleteWorkflow: (workflowIdOrName: string) =>
+    request<{ ok: boolean; deleted: boolean }>(
+      `/api/workflows/${encodeURIComponent(workflowIdOrName)}`,
+      { method: "DELETE" },
+    ),
+  runWorkflow: (workflowIdOrName: string, body: {
+    inputs?: Record<string, unknown>;
+    max_rounds?: number;
+    max_tool_phases?: number;
+    model_name?: string;
+  }) =>
+    request<{ ok: boolean; execution_id: string; status: string }>(
+      `/api/workflows/${encodeURIComponent(workflowIdOrName)}/run`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  listWorkflowRuns: (workflowIdOrName: string) =>
+    request<WorkflowExecutionsResponse>(
+      `/api/workflows/${encodeURIComponent(workflowIdOrName)}/runs`,
+    ),
+  setWorkflowEnabled: (workflowIdOrName: string, enabled: boolean) =>
+    request<{ ok: boolean; enabled: boolean }>(
+      `/api/workflows/${encodeURIComponent(workflowIdOrName)}/enabled`,
+      { method: "POST", body: JSON.stringify({ enabled }) },
+    ),
+
+  // ============ 任务 API ============
+  listTasks: (query?: { status?: string; task_type?: string; limit?: number; offset?: number }) => {
+    const sp = new URLSearchParams();
+    if (query?.status) sp.set("status", query.status);
+    if (query?.task_type) sp.set("task_type", query.task_type);
+    if (query?.limit !== undefined) sp.set("limit", String(query.limit));
+    if (query?.offset !== undefined) sp.set("offset", String(query.offset));
+    const q = sp.toString();
+    return request<TaskListResponse>(`/api/tasks${q ? `?${q}` : ""}`);
+  },
+  createTask: (body: {
+    name: string;
+    task_type?: string;
+    input_data?: Record<string, unknown>;
+    agent_name?: string;
+    agent_type?: string;
+    priority?: number;
+    metadata?: Record<string, unknown>;
+  }) =>
+    request<{ ok: boolean; id: string; status: string }>("/api/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getTask: (taskId: string) => request<TaskDetailResponse>(`/api/tasks/${encodeURIComponent(taskId)}`),
+  updateTask: (taskId: string, body: {
+    status?: string;
+    output_data?: Record<string, unknown>;
+    error_message?: string;
+  }) =>
+    request<{ ok: boolean; updated: boolean; task_id: string }>(
+      `/api/tasks/${encodeURIComponent(taskId)}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    ),
+  deleteTask: (taskId: string) =>
+    request<{ ok: boolean; deleted: boolean }>(
+      `/api/tasks/${encodeURIComponent(taskId)}`,
+      { method: "DELETE" },
+    ),
+  retryTask: (taskId: string) =>
+    request<{ ok: boolean; task_id: string; status: string }>(
+      `/api/tasks/${encodeURIComponent(taskId)}/retry`,
+      { method: "POST", body: JSON.stringify({}) },
+    ),
 };

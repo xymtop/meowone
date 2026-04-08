@@ -206,6 +206,64 @@ CREATE TABLE IF NOT EXISTS prompts (
 
 CREATE INDEX IF NOT EXISTS idx_prompts_enabled
 ON prompts (enabled, prompt_key);
+
+CREATE TABLE IF NOT EXISTS workflows (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT DEFAULT '',
+    strategy TEXT DEFAULT 'direct',
+    nodes_json TEXT DEFAULT '[]',
+    node_count INTEGER DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows (name);
+
+CREATE TABLE IF NOT EXISTS workflow_executions (
+    id TEXT PRIMARY KEY,
+    workflow_id TEXT NOT NULL,
+    workflow_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    inputs_json TEXT DEFAULT '{}',
+    outputs_json TEXT DEFAULT '{}',
+    error_message TEXT,
+    node_results_json TEXT DEFAULT '[]',
+    started_at TEXT,
+    completed_at TEXT,
+    duration_ms INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_executions_workflow
+ON workflow_executions (workflow_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_workflow_executions_status
+ON workflow_executions (status, created_at);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    task_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    input_json TEXT DEFAULT '{}',
+    output_json TEXT DEFAULT '{}',
+    agent_name TEXT,
+    agent_type TEXT,
+    error_message TEXT,
+    parent_task_id TEXT,
+    metadata_json TEXT DEFAULT '{}',
+    priority INTEGER DEFAULT 0,
+    started_at TEXT,
+    completed_at TEXT,
+    duration_ms INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_tasks_name ON tasks (name);
 """
 
 _INSERT_DEFAULT_USER = "INSERT OR IGNORE INTO users (id, username) VALUES ('default', 'user');"

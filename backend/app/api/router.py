@@ -16,6 +16,8 @@ from app.api.openai import router as openai_router
 from app.api.prompt_management import router as prompt_management_router
 from app.api.scheduled_tasks import router as scheduled_tasks_router
 from app.api.sessions import router as sessions_router
+from app.api.workflows import router as workflows_router
+from app.api.tasks import router as tasks_router
 
 api_router = APIRouter()
 api_router.include_router(agent_executions_router)
@@ -32,6 +34,8 @@ api_router.include_router(prompt_management_router)
 api_router.include_router(meowone_config_router)
 api_router.include_router(internal_agents_router)
 api_router.include_router(scheduled_tasks_router)
+api_router.include_router(workflows_router)
+api_router.include_router(tasks_router)
 
 
 def include_api_routers(app: FastAPI) -> None:

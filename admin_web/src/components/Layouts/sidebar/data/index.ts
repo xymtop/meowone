@@ -110,6 +110,24 @@ export const NAV_DATA: NavSection[] = [
     label: "高级",
     items: [
       {
+        title: "工作流编排",
+        url: "/meowone/workflows",
+        icon: Icons.Table,
+        items: [],
+      },
+      {
+        title: "任务管理",
+        url: "/meowone/tasks",
+        icon: Icons.Table,
+        items: [],
+      },
+      {
+        title: "系统监控",
+        url: "/meowone/monitoring",
+        icon: Icons.PieChart,
+        items: [],
+      },
+      {
         title: "任务调度",
         url: "/meowone/scheduled-tasks",
         icon: Icons.Calendar,

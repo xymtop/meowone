@@ -177,7 +177,7 @@ def scan_skill_directory(skill_path: Path, skill_name: str) -> List[SkillFile]:
         stat = item.stat()
 
         files.append(SkillFile(
-            path=str(rel_path),
+            path=rel_path.as_posix(),
             name=item.name,
             size=stat.st_size if item.is_file() else 0,
             is_directory=item.is_dir(),
@@ -352,14 +352,27 @@ def delete_skill(name: str) -> bool:
         return False
 
 
+def _resolve_safe_skill_file(skill_name: str, file_path: str) -> Optional[Path]:
+    """将相对路径解析为 skill 目录下的真实文件，禁止跳出目录。"""
+    skill_root = (_skills_root() / skill_name).resolve()
+    if not skill_root.is_dir():
+        return None
+    normalized = (file_path or "").replace("\\", "/").strip().lstrip("/")
+    if not normalized or ".." in Path(normalized).parts:
+        return None
+    target = (skill_root / normalized).resolve()
+    try:
+        target.relative_to(skill_root)
+    except ValueError:
+        return None
+    return target
+
+
 def update_skill_file(skill_name: str, file_path: str, content: str) -> bool:
     """更新 Skill 中的文件"""
-    skill_root = _skills_root() / skill_name
-    if not skill_root.exists():
+    file_path_obj = _resolve_safe_skill_file(skill_name, file_path)
+    if file_path_obj is None:
         return False
-
-    file_path_obj = skill_root / file_path
-    # 确保父目录存在
     file_path_obj.parent.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -373,10 +386,8 @@ def update_skill_file(skill_name: str, file_path: str, content: str) -> bool:
 
 def read_skill_file(skill_name: str, file_path: str) -> Optional[str]:
     """读取 Skill 中的文件"""
-    skill_root = _skills_root() / skill_name
-    file_path_obj = skill_root / file_path
-
-    if not file_path_obj.is_file():
+    file_path_obj = _resolve_safe_skill_file(skill_name, file_path)
+    if file_path_obj is None or not file_path_obj.is_file():
         return None
 
     try:

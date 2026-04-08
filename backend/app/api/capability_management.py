@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.config_loaders import invalidate_config_cache
@@ -21,7 +21,7 @@ from app.services.skill_fs import (
     get_skill_as_dict,
     create_skill,
     delete_skill,
-    read_skill_file,
+    read_skill_file as read_skill_file_fs,
     update_skill_file,
 )
 
@@ -219,14 +219,28 @@ async def update_skill_file(name: str, body: SkillUpdateFileRequest) -> Dict[str
     return {"ok": True, "name": name, "file_path": body.file_path}
 
 
-@router.get("/skills/fs/{name}/files/{path:path}")
-async def read_skill_file(name: str, path: str) -> Dict[str, Any]:
-    """读取 Skill 中的文件内容"""
+@router.get("/skills/fs/{name}/file-content")
+async def read_skill_file_query(name: str, file_path: str = Query(..., min_length=1, description="相对 skill 目录的路径，如 scripts/a.py")) -> Dict[str, Any]:
+    """读取 Skill 文件（query 传路径，避免 URL 路径中含 / 被网关拦截）。"""
     target = name.strip()
     if not target:
         raise HTTPException(status_code=400, detail="name is required")
 
-    content = read_skill_file(target, path)
+    content = read_skill_file_fs(target, file_path)
+    if content is None:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return {"name": name, "file_path": file_path, "content": content}
+
+
+@router.get("/skills/fs/{name}/files/{path:path}")
+async def read_skill_file_path(name: str, path: str) -> Dict[str, Any]:
+    """读取 Skill 中的文件内容（路径参数方式，含子目录时用 file-content 接口更稳）。"""
+    target = name.strip()
+    if not target:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    content = read_skill_file_fs(target, path)
     if content is None:
         raise HTTPException(status_code=404, detail="File not found")
 
