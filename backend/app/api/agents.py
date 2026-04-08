@@ -24,6 +24,7 @@ class InternalAgentUpsertRequest(BaseModel):
     prompt_key: str = ""
     model_name: str = ""
     scheduler_mode: str = "direct"
+    loop_mode: str = "react"
 
 
 class ExternalAgentUpsertRequest(BaseModel):
@@ -66,6 +67,7 @@ async def upsert_internal_agent(body: InternalAgentUpsertRequest) -> Dict[str, A
         prompt_key=body.prompt_key.strip(),
         model_name=body.model_name.strip(),
         scheduler_mode=body.scheduler_mode.strip() or "direct",
+        loop_mode=body.loop_mode.strip() or "react",
     )
     return {"ok": True, "name": name, "agent_type": "internal"}
 

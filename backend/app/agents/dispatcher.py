@@ -51,6 +51,7 @@ class AgentDispatcher:
             capabilities=plan.resolved_capabilities,
             extra_system=plan.resolved_system_prompt,
             limits=plan.resolved_limits,
+            loop_mode=plan.loop_mode,
         )
         text_parts: List[str] = []
         done: DoneEvent | None = None

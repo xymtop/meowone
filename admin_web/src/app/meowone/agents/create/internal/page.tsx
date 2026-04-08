@@ -111,6 +111,14 @@ function RocketIcon() {
   );
 }
 
+function LoopIcon() {
+  return (
+    <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" />
+    </svg>
+  );
+}
+
 function MessageIcon() {
   return (
     <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -136,6 +144,7 @@ type InternalFormData = {
   skills: string[];
   promptKey: string;
   customPrompt: string;
+  loopMode: string;
 };
 
 // ============ 主组件 ============
@@ -161,16 +170,18 @@ export default function CreateInternalAgentPage() {
     skills: [],
     promptKey: "",
     customPrompt: "",
+    loopMode: "react",
   });
 
   // 步骤定义
   const steps = [
     { id: 0, title: "基本信息", subtitle: "给智能体起个名字", icon: <RobotIcon /> },
     { id: 1, title: "选择大脑", subtitle: "配置大模型", icon: <BrainIcon /> },
-    { id: 2, title: "连接数据源", subtitle: "添加 MCP 服务", icon: <PlugIcon /> },
-    { id: 3, title: "添加技能", subtitle: "赋予特殊能力", icon: <ToolIcon /> },
-    { id: 4, title: "设定角色", subtitle: "配置提示词", icon: <StarIcon /> },
-    { id: 5, title: "启动", subtitle: "预览并开始", icon: <RocketIcon /> },
+    { id: 2, title: "选择思考方式", subtitle: "配置循环执行模式", icon: <LoopIcon /> },
+    { id: 3, title: "连接数据源", subtitle: "添加 MCP 服务", icon: <PlugIcon /> },
+    { id: 4, title: "添加技能", subtitle: "赋予特殊能力", icon: <ToolIcon /> },
+    { id: 5, title: "设定角色", subtitle: "配置提示词", icon: <StarIcon /> },
+    { id: 6, title: "启动", subtitle: "预览并开始", icon: <RocketIcon /> },
   ];
 
   // 加载资源数据
@@ -251,7 +262,7 @@ export default function CreateInternalAgentPage() {
       const systemPrompt = formData.promptKey && formData.promptKey !== "__custom__" ? undefined : formData.customPrompt;
       const promptKeyToSave = formData.promptKey && formData.promptKey !== "__custom__" ? formData.promptKey : "";
       
-      await meowoneApi.upsertInternalAgent({
+      await meowoneApi.createInternalAgentRuntime({
         name: formData.name,
         description: formData.description,
         system_prompt: systemPrompt,
@@ -263,8 +274,7 @@ export default function CreateInternalAgentPage() {
         max_rounds: null,
         max_tool_phases: null,
         timeout_seconds: null,
-        model_name: formData.modelName,
-        scheduler_mode: "direct",
+        loop_mode: formData.loopMode,
       });
       router.push("/meowone/agents");
     } catch (e) {
@@ -445,8 +455,55 @@ export default function CreateInternalAgentPage() {
           </div>
         )}
 
-        {/* 步骤 2: MCP 服务 */}
+        {/* 步骤 2: 选择思考方式 */}
         {currentStep === 2 && (
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-700">选择智能体的思考方式</h3>
+              <p className="mt-1 text-xs text-gray-500">循环模式决定智能体如何处理复杂任务</p>
+            </div>
+            <div className="space-y-3">
+              {[
+                { value: "react", name: "ReAct（默认）", desc: "思考 → 行动 → 观察，适合大多数任务", badge: "推荐" },
+                { value: "plan_exec", name: "计划-执行分离", desc: "先规划再执行，适合需要步骤化处理的任务", badge: "" },
+                { value: "critic", name: "批评-改进", desc: "生成 → 批评 → 改进，适合需要高质量输出的任务", badge: "" },
+                { value: "hierarchical", name: "层级式执行", desc: "上级规划，下级执行，适合复杂多层次任务", badge: "" },
+              ].map((mode) => {
+                const isSelected = formData.loopMode === mode.value;
+                return (
+                  <button
+                    key={mode.value}
+                    onClick={() => setFormData((prev) => ({ ...prev, loopMode: mode.value }))}
+                    className={`flex w-full items-center justify-between rounded-xl border-2 p-4 text-left transition-all ${
+                      isSelected ? "border-blue-500 bg-blue-50" : "border-gray-100 bg-gray-50 hover:border-gray-200"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-0.5 rounded-lg p-2 ${isSelected ? "bg-blue-500 text-white" : "bg-white text-gray-600"}`}>
+                        <LoopIcon />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900">{mode.name}</p>
+                          {mode.badge && <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">{mode.badge}</span>}
+                        </div>
+                        <p className="mt-1 text-sm text-gray-500">{mode.desc}</p>
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <div className="flex size-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-500 text-white">
+                        <CheckIcon />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 步骤 3: MCP 服务 */}
+        {currentStep === 3 && (
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -504,8 +561,8 @@ export default function CreateInternalAgentPage() {
           </div>
         )}
 
-        {/* 步骤 3: Skills */}
-        {currentStep === 3 && (
+        {/* 步骤 4: Skills */}
+        {currentStep === 4 && (
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -562,8 +619,8 @@ export default function CreateInternalAgentPage() {
           </div>
         )}
 
-        {/* 步骤 4: 提示词选择 */}
-        {currentStep === 4 && (
+        {/* 步骤 5: 提示词选择 */}
+        {currentStep === 5 && (
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -652,8 +709,8 @@ export default function CreateInternalAgentPage() {
           </div>
         )}
 
-        {/* 步骤 5: 预览并启动 */}
-        {currentStep === 5 && (
+        {/* 步骤 6: 预览并启动 */}
+        {currentStep === 6 && (
           <div className="space-y-6">
             <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
               <div className="bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-4">
@@ -704,6 +761,15 @@ export default function CreateInternalAgentPage() {
                     </div>
                     <span className={`text-sm font-medium ${formData.promptKey ? "text-green-600" : formData.customPrompt ? "text-green-600" : "text-gray-400"}`}>
                       {formData.promptKey ? `模板: ${formData.promptKey}` : formData.customPrompt ? "自定义" : "未配置"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg bg-gray-50 p-3">
+                    <div className="flex items-center gap-2">
+                      <LoopIcon />
+                      <span className="text-sm text-gray-700">思考方式</span>
+                    </div>
+                    <span className="text-sm font-medium text-green-600">
+                      {formData.loopMode === "react" ? "ReAct（默认）" : formData.loopMode === "plan_exec" ? "计划-执行分离" : formData.loopMode === "critic" ? "批评-改进" : "层级式执行"}
                     </span>
                   </div>
                 </div>

@@ -63,8 +63,14 @@ async def upsert_internal_agent(
     prompt_key: str = "",
     model_name: str = "",
     scheduler_mode: str = "direct",
+    loop_mode: str = "react",
 ) -> None:
     async with get_db() as db:
+        metadata = {
+            "model_name": model_name,
+            "scheduler_mode": scheduler_mode,
+            "loop_mode": loop_mode,
+        }
         await db.execute(
             """
             INSERT INTO agents (
@@ -103,7 +109,7 @@ async def upsert_internal_agent(
                 max_tool_phases,
                 timeout_seconds,
                 prompt_key,
-                json.dumps({"model_name": model_name, "scheduler_mode": scheduler_mode}, ensure_ascii=False),
+                json.dumps(metadata, ensure_ascii=False),
             ),
         )
         await db.commit()

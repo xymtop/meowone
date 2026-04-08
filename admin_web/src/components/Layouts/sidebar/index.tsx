@@ -4,9 +4,8 @@ import { Suspense, useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { Logo } from "@/components/logo";
 import { NAV_DATA, type NavItem } from "./data";
-import { ArrowLeftIcon, ChevronUp } from "./icons";
+import { ChevronUp } from "./icons";
 import { MenuItem } from "./menu-item";
 import { useSidebarContext } from "./sidebar-context";
 
@@ -90,45 +89,12 @@ function SidebarContent() {
       >
         <div
           className={cn(
-            "flex h-full flex-col py-10",
+            "flex h-full flex-col py-6",
             narrow ? "items-center px-1.5" : "pl-[25px] pr-[7px]",
           )}
         >
-          <div className={cn("relative", narrow ? "w-full px-0" : "pr-4.5")}>
-            <Link
-              href={"/"}
-              onClick={() => isMobile && toggleSidebar()}
-              className={cn(
-                "flex px-0 py-2.5 min-[850px]:py-0",
-                narrow && "justify-center",
-              )}
-            >
-              {narrow ? (
-                <span
-                  className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold tracking-tight text-primary"
-                  aria-hidden
-                >
-                  M
-                </span>
-              ) : (
-                <Logo />
-              )}
-            </Link>
-
-            {isMobile && (
-              <button
-                onClick={toggleSidebar}
-                className="absolute left-3/4 right-4.5 top-1/2 -translate-y-1/2 text-right"
-              >
-                <span className="sr-only">Close Menu</span>
-
-                <ArrowLeftIcon className="ml-auto size-7" />
-              </button>
-            )}
-          </div>
-
           {/* Navigation */}
-          <div className="custom-scrollbar mt-6 flex-1 overflow-y-auto pr-3 min-[850px]:mt-10">
+          <div className="custom-scrollbar flex-1 overflow-y-auto pr-3">
             {NAV_DATA.map((section) => (
               <div
                 key={section.label}

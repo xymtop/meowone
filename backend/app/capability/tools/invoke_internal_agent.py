@@ -9,7 +9,12 @@ from app.capability.tool_base import BaseTool
 class InvokeInternalAgentTool(BaseTool):
     name = "invoke_internal_agent"
     display_name = "Invoke internal agent"
-    description = "Run a task using a created internal subagent. The subagent reuses the shared loop runtime."
+    description = (
+        "Delegate the current task to a named internal subagent for execution. "
+        "The subagent receives full tool access (sandbox, file, terminal, etc.) and returns its result here. "
+        "Use this when the task requires tool execution — do NOT attempt to execute tools directly yourself; "
+        "only use `invoke_internal_agent` (or `list_internal_agents` to discover agents) for work."
+    )
     permission = "standard"
     category = "agents"
     tags = ("internal", "delegate")

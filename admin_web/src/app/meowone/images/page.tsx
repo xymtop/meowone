@@ -178,7 +178,7 @@ export default function ImagesPage() {
       {/* 页面头部 */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">智能体镜像</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">智能体OS镜像</h1>
           <p className="mt-1 text-sm text-gray-500">镜像 = 选中的智能体 + 可选调度策略 + 可选执行环境（推理模式由智能体或运行时决定，不在此配置）</p>
         </div>
         <Link

@@ -227,29 +227,39 @@ export default function QuickStartPage() {
   const isSystemReady = status.modelCount > 0 && status.health === "ok";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
-      {/* 顶部导航 */}
-      <div className="border-b border-gray-200/50 bg-white/80 backdrop-blur-md">
-        <div className="mx-auto max-w-6xl px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">MeowOne</h1>
-              <p className="mt-0.5 text-sm text-gray-500">构建你的 AI 智能体</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/meowone/chat"
-                className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600"
-              >
+    <div className="mx-auto w-full max-w-6xl space-y-8 pb-10 pt-1">
+      {/* 欢迎区：与顶栏分工，不重复 MEOWONE；主色与侧栏 primary 一致 */}
+      <section className="relative overflow-hidden rounded-2xl border border-stroke bg-gradient-to-br from-white via-[#f8f9ff] to-[#f3f1ff] shadow-sm dark:border-dark-3 dark:from-[#141c2e] dark:via-[#121a28] dark:to-[#0f1624]">
+        <div
+          className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-primary/15 blur-2xl dark:bg-primary/20"
+          aria-hidden
+        />
+        <div className="pointer-events-none absolute -bottom-8 left-1/4 size-32 rounded-full bg-primary/10 blur-2xl dark:bg-primary/15" aria-hidden />
+        <div className="relative flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between md:p-6">
+          <div className="min-w-0 space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">工作台</p>
+            <h1 className="text-xl font-semibold tracking-tight text-dark dark:text-white md:text-2xl">
+              构建你的 AI 智能体操作系统
+            </h1>
+            <p className="max-w-xl text-sm leading-relaxed text-body dark:text-dark-6">
+              配置模型、MCP、技能与智能体，从快速开始或直接进入对话。
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            <Link
+              href="/meowone/chat"
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm shadow-primary/25 transition hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <span className="[&_svg]:size-5">
                 <ChatIcon />
-                开始对话
-              </Link>
-            </div>
+              </span>
+              开始对话
+            </Link>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="mx-auto max-w-6xl px-4 py-8">
+      <div className="space-y-8">
         {/* 系统状态提示 */}
         {status.hasWarning && (
           <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -402,7 +412,7 @@ export default function QuickStartPage() {
     
 
             {/* 任务 */}
-            <Link
+            {/* <Link
               href="/meowone/tasks"
               className="group rounded-xl border border-gray-200 bg-white p-4 transition-all hover:border-gray-300 hover:shadow-sm"
             >
@@ -415,7 +425,7 @@ export default function QuickStartPage() {
                   <p className="text-sm text-gray-500">监控任务执行</p>
                 </div>
               </div>
-            </Link>
+            </Link> */}
 
             {/* 监控 */}
             <Link

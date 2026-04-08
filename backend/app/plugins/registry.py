@@ -218,6 +218,18 @@ def discover_plugins() -> None:
     except ImportError:
         pass
 
+    try:
+        from app.loops.hierarchical import HierarchicalLoop
+        plugin_registry.register_loop(HierarchicalLoop)
+    except ImportError:
+        pass
+
+    try:
+        from app.loops.critic import CriticLoop
+        plugin_registry.register_loop(CriticLoop)
+    except ImportError:
+        pass
+
     # 注册内置策略
     try:
         from app.scheduler.strategies.direct import DirectStrategy
@@ -234,5 +246,29 @@ def discover_plugins() -> None:
     try:
         from app.scheduler.strategies.capability_match import CapabilityMatchStrategy
         plugin_registry.register_strategy(CapabilityMatchStrategy)
+    except ImportError:
+        pass
+
+    try:
+        from app.scheduler.strategies.team_dispatch import TeamDispatchStrategy
+        plugin_registry.register_strategy(TeamDispatchStrategy)
+    except ImportError:
+        pass
+
+    try:
+        from app.scheduler.strategies.hierarchical import HierarchicalStrategy
+        plugin_registry.register_strategy(HierarchicalStrategy)
+    except ImportError:
+        pass
+
+    try:
+        from app.scheduler.strategies.auction import AuctionStrategy
+        plugin_registry.register_strategy(AuctionStrategy)
+    except ImportError:
+        pass
+
+    try:
+        from app.scheduler.strategies.democratic import DemocraticStrategy
+        plugin_registry.register_strategy(DemocraticStrategy)
     except ImportError:
         pass

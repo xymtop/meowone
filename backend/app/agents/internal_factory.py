@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List
 
@@ -22,6 +23,7 @@ class InternalAgentSpec:
     max_tool_phases: int | None = None
     timeout_seconds: int | None = None
     prompt_key: str = ""
+    loop_mode: str = "react"
 
     def to_public_dict(self) -> Dict[str, Any]:
         data = asdict(self)
@@ -49,6 +51,7 @@ class InternalAgentFactory:
             max_tool_phases=spec.max_tool_phases,
             timeout_seconds=spec.timeout_seconds,
             prompt_key=spec.prompt_key,
+            loop_mode=spec.loop_mode,
         )
         return spec
 
@@ -62,6 +65,9 @@ class InternalAgentFactory:
 
     @staticmethod
     def _to_spec(data: Dict[str, Any]) -> InternalAgentSpec:
+        metadata = data.get("metadata_json") or {}
+        if isinstance(metadata, str) and metadata:
+            metadata = json.loads(metadata)
         return InternalAgentSpec(
             name=str(data.get("name") or ""),
             description=str(data.get("description") or ""),
@@ -74,6 +80,7 @@ class InternalAgentFactory:
             max_tool_phases=data.get("max_tool_phases"),
             timeout_seconds=data.get("timeout_seconds"),
             prompt_key=str(data.get("prompt_key") or ""),
+            loop_mode=str(metadata.get("loop_mode") or "react").strip() or "react",
         )
 
     async def invoke(self, *, name: str, task: str, history: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:

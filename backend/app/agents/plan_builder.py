@@ -18,6 +18,7 @@ class AgentRuntimePlan:
     resolved_capabilities: CapabilityRegistry
     resolved_limits: LoopLimits
     execution_transport: str
+    loop_mode: str = "react"
 
 
 class RestrictedCallMcpTool:
@@ -107,6 +108,8 @@ class AgentPlanBuilder:
 
         merged_limits = self._resolve_limits(definition=definition, overrides=overrides or {})
         transport = "external_a2a" if definition.agent_type == "external" else "internal_loop"
+        from app.loop.runtime import DEFAULT_LOOP_MODE
+        loop_mode = definition.loop_mode or DEFAULT_LOOP_MODE
         return AgentRuntimePlan(
             agent_name=definition.name,
             agent_type=definition.agent_type,
@@ -114,6 +117,7 @@ class AgentPlanBuilder:
             resolved_capabilities=constrained,
             resolved_limits=merged_limits,
             execution_transport=transport,
+            loop_mode=loop_mode,
         )
 
     async def _resolve_skill_bodies(self, skill_names: List[str]) -> List[str]:

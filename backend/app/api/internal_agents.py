@@ -22,6 +22,7 @@ class InternalAgentCreateRequest(BaseModel):
     max_tool_phases: Optional[int] = None
     timeout_seconds: Optional[int] = None
     prompt_key: str = ""
+    loop_mode: str = "react"
 
 
 class InternalAgentInvokeRequest(BaseModel):
@@ -52,6 +53,7 @@ async def create_internal_agent(body: InternalAgentCreateRequest):
         max_tool_phases=body.max_tool_phases,
         timeout_seconds=body.timeout_seconds,
         prompt_key=body.prompt_key.strip(),
+        loop_mode=body.loop_mode.strip() or "react",
     )
     saved = await internal_agent_factory.create(spec)
     return {"ok": True, "agent": saved.to_public_dict()}

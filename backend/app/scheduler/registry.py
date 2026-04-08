@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict
 
-from app.scheduler.strategies import DirectStrategy, MasterSlaveStrategy, SchedulerStrategy, SwarmStrategy
+from app.scheduler.strategies import DirectStrategy, MasterSlaveStrategy, SchedulerStrategy, SwarmStrategy, HierarchicalStrategy
 from app.scheduler.types import SchedulerDecision
 
 
@@ -12,6 +12,7 @@ class SchedulerRegistry:
         self.register(DirectStrategy())
         self.register(MasterSlaveStrategy())
         self.register(SwarmStrategy())
+        self.register(HierarchicalStrategy())
 
     def register(self, strategy: SchedulerStrategy) -> None:
         self._strategies[strategy.name] = strategy

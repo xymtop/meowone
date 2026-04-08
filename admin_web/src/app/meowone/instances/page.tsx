@@ -211,7 +211,7 @@ export default function InstancesPage() {
       {/* 页面头部 */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">智能体实例</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">智能体OS实例</h1>
           <p className="mt-1 text-sm text-gray-500">实例是镜像的运行实体，直接用于对话和任务执行</p>
         </div>
         <Link

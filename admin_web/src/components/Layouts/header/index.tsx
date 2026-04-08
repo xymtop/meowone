@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSidebarContext } from "../sidebar/sidebar-context";
+import { MeowoneLogo } from "@/components/logo";
 import { MenuIcon } from "./icons";
 import { HeaderSettingsMenu } from "./header-settings-menu";
 import { Notification } from "./notification";
@@ -14,33 +15,38 @@ export function Header() {
   const isChatPage = pathname === "/meowone/chat";
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[#e3e8f2] bg-[#f8faff]/96 px-4 py-3 backdrop-blur dark:border-[#2a3c61] dark:bg-[#101d35]/96 md:px-5 2xl:px-10">
-      <button
-        type="button"
-        onClick={() => (isMobile ? toggleSidebar() : toggleRail())}
-        className="rounded-lg border border-[#dbe3f1] bg-white px-1.5 py-1 dark:border-[#3a5688] dark:bg-[#142542] hover:bg-[#eef3ff] hover:dark:bg-[#1b3157]"
-        aria-label={isMobile ? "打开或关闭菜单" : "收起或展开侧栏"}
-      >
-        <MenuIcon />
-        <span className="sr-only">导航</span>
-      </button>
+    <header className="sticky top-0 z-30 flex items-center justify-between border-b border-[#e3e8f2] bg-[#f8faff]/96 px-4 py-2.5 backdrop-blur dark:border-[#2a3c61] dark:bg-[#101d35]/96 md:px-5 2xl:px-10">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => (isMobile ? toggleSidebar() : toggleRail())}
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-[#dbe3f1] bg-white text-dark/70 hover:border-primary/40 hover:bg-primary/5 hover:text-primary dark:border-[#3a5688] dark:bg-[#142542] dark:text-white/70 dark:hover:border-primary/40 dark:hover:bg-primary/10 dark:hover:text-primary"
+          aria-label={isMobile ? "打开或关闭菜单" : "收起或展开侧栏"}
+        >
+          <MenuIcon />
+          <span className="sr-only">导航</span>
+        </button>
 
-      {isMobile && (
-        <Link href={"/"} className="ml-2 max-[430px]:hidden min-[375px]:ml-4">
-          <span className="text-sm font-extrabold tracking-[0.14em] text-dark dark:text-white">
-            MEOWONE
-          </span>
+        <Link href={"/"} className="flex items-center gap-2.5">
+          <MeowoneLogo className="size-8 shrink-0 text-primary" />
+          <div>
+            <p className="text-sm font-bold tracking-[0.08em] text-dark dark:text-white md:text-base">
+              MeowOne
+            </p>
+            <p className="hidden text-[10px] leading-tight font-medium tracking-wide text-slate-400 dark:text-slate-500 sm:block">
+              AI OS
+            </p>
+          </div>
         </Link>
-      )}
-
-      <div className="max-xl:hidden">
-        <h1 className="mb-0.5 text-heading-5 font-bold text-dark dark:text-white">
-          MEOWONE
-        </h1>
-        <p className="font-medium text-slate-500 dark:text-slate-300">AI 操作系统管理后台</p>
       </div>
 
-      <div className="flex flex-1 items-center justify-end gap-2 min-[375px]:gap-4">
+      <div className="hidden text-center max-xl:block">
+        <h1 className="text-sm font-semibold text-dark dark:text-white">
+          管理后台
+        </h1>
+      </div>
+
+      <div className="flex flex-1 items-center justify-end gap-1 min-[375px]:gap-3">
         {isChatPage ? (
           <HeaderSettingsMenu />
         ) : (

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
@@ -45,6 +46,7 @@ class AgentDefinition:
     tool_policy: AgentToolPolicy = field(default_factory=AgentToolPolicy)
     limits: AgentLimits = field(default_factory=AgentLimits)
     endpoint: AgentEndpoint = field(default_factory=lambda: AgentEndpoint(protocol="internal_loop"))
+    loop_mode: str = "react"
 
     @classmethod
     def from_row(cls, row: Dict[str, Any]) -> "AgentDefinition":
@@ -52,6 +54,9 @@ class AgentDefinition:
         protocol = str(row.get("protocol") or "").strip()
         if not protocol:
             protocol = "a2a" if agent_type == "external" else "internal_loop"
+        metadata = row.get("metadata_json") or {}
+        if isinstance(metadata, str) and metadata:
+            metadata = json.loads(metadata)
         return cls(
             name=str(row.get("name") or "").strip(),
             agent_type=agent_type,
@@ -75,8 +80,9 @@ class AgentDefinition:
             endpoint=AgentEndpoint(
                 protocol=protocol,
                 base_url=str(row.get("base_url") or "").strip(),
-                metadata_json=row.get("metadata_json") or {},
+                metadata_json=metadata,
             ),
+            loop_mode=str(metadata.get("loop_mode") or "react").strip() or "react",
         )
 
     def validate(self) -> None:
@@ -93,3 +99,6 @@ class AgentDefinition:
                 raise ValueError("external agent must use protocol a2a")
             if not self.endpoint.base_url:
                 raise ValueError("external a2a agent base_url is required")
+        from app.loop.runtime import SUPPORTED_LOOP_MODES
+        if self.loop_mode not in SUPPORTED_LOOP_MODES:
+            raise ValueError(f"loop_mode must be one of: {', '.join(sorted(SUPPORTED_LOOP_MODES))}")

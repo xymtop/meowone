@@ -28,6 +28,7 @@ class CreateInternalAgentTool(BaseTool):
             "max_tool_phases": {"type": "integer"},
             "timeout_seconds": {"type": "integer"},
             "prompt_key": {"type": "string"},
+            "loop_mode": {"type": "string", "enum": ["react", "plan_exec", "critic", "hierarchical"]},
         },
         "required": ["agent_name"],
     }
@@ -48,6 +49,7 @@ class CreateInternalAgentTool(BaseTool):
             max_tool_phases=params.get("max_tool_phases"),
             timeout_seconds=params.get("timeout_seconds"),
             prompt_key=str(params.get("prompt_key") or "").strip(),
+            loop_mode=str(params.get("loop_mode") or "react").strip() or "react",
         )
         saved = await internal_agent_factory.create(spec)
         return {"ok": True, "agent": saved.to_public_dict()}

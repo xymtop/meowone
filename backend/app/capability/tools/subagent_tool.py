@@ -10,9 +10,10 @@ class SubagentSchedulerTool(BaseTool):
     name = "invoke_subagent"
     display_name = "Subagent scheduler"
     description = (
-        "Run a task on a registered remote A2A specialist by `agent_tool_name` "
-        "(same names as in `.meowone/agents.yaml`, e.g. code_writer, doc_assistant). "
-        "The main model continues after receiving the tool result (plan next steps, call more tools)."
+        "Delegate the current task to a registered remote A2A specialist agent (same transport as `.meowone/agents.yaml`). "
+        "The main model continues after receiving the tool result (plan next steps, call more tools). "
+        "Use this to dispatch work — do NOT attempt to execute tools directly yourself; "
+        "only use this tool (or `list_internal_agents`) for work."
     )
     permission = "standard"
     category = "agents"

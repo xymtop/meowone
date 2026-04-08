@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from app.bootstrap.capabilities import DISPATCH_TOOL_NAMES, REMOTE_AGENT_TOOL_PREFIX
 from app.capability.registry import CapabilityRegistry
 from app.capability.runtime import CapabilityFilter, CapabilityRuntime
 from app.config_loaders import build_extra_system_prompt, load_channels_config, load_scheduler_config
+from app.loop.runtime import DEFAULT_LOOP_MODE, SUPPORTED_LOOP_MODES
 from app.loop.context import UserContent
 from app.loop.events import (
     CardEvent,
@@ -93,6 +95,9 @@ class ConversationTurnService:
         extra_system = ""
         agent_capability_filter: Optional[CapabilityFilter] = None
         llm_model: str | None = (model_name or "").strip() or None
+        agent_loop_mode: str = DEFAULT_LOOP_MODE
+        allow_tools: List[str] = []
+        deny_tools: List[str] = []
 
         agent_cfg: Dict[str, Any] | None = None
         if agent_id and str(agent_id).strip():
@@ -121,6 +126,15 @@ class ConversationTurnService:
             if meta_model:
                 llm_model = meta_model
 
+            # 从 metadata_json 中读取 loop_mode
+            agent_loop_mode: str = DEFAULT_LOOP_MODE
+            metadata = agent_cfg.get("metadata_json") or {}
+            if isinstance(metadata, str) and metadata:
+                metadata = json.loads(metadata)
+            raw_loop_mode = str(metadata.get("loop_mode") or "").strip()
+            if raw_loop_mode and raw_loop_mode in SUPPORTED_LOOP_MODES:
+                agent_loop_mode = raw_loop_mode
+
             if mcp_servers or agent_skills or allow_tools or deny_tools:
                 base_allowed: List[str] = []
                 if mcp_servers:
@@ -144,15 +158,8 @@ class ConversationTurnService:
                 else:
                     agent_capability_filter = CapabilityFilter(allow_names=allow_tools, deny_names=None)
             else:
-                # 仅内部智能体：未配置 MCP/Skill 时禁止对应工具，避免回落到「主通道全量工具」
-                if str(agent_cfg.get("agent_type") or "") == "internal":
-                    deny_extra: List[str] = []
-                    if not mcp_servers:
-                        deny_extra.extend(["list_mcp_tools", "call_mcp_tool"])
-                    if not agent_skills:
-                        deny_extra.append("load_agent_skill")
-                    if deny_extra:
-                        agent_capability_filter = CapabilityFilter(allow_names=None, deny_names=deny_extra)
+                # 智能体未配置任何工具策略时，主模型由下方的调度层过滤接管
+                pass
 
             if mcp_servers:
                 yield {
@@ -190,6 +197,22 @@ class ConversationTurnService:
                 merged_allow = base_allow or None
             merged_deny = list(dict.fromkeys(base_deny + agent_deny)) or None
             effective_filter = CapabilityFilter(allow_names=merged_allow, deny_names=merged_deny)
+
+        # 调度层过滤：主模型只看到调度相关工具，除非智能体显式配置了 allow_tools
+        if agent_cfg:
+            agent_explicit_allow = bool(allow_tools)
+            if not agent_explicit_allow:
+                # 主模型默认只能使用调度层工具（子智能体由 invoke_internal_agent 分发）
+                dispatch_deny = []
+                for name in (effective_filter.allow_names or []):
+                    if name not in DISPATCH_TOOL_NAMES and not name.startswith(REMOTE_AGENT_TOOL_PREFIX):
+                        dispatch_deny.append(name)
+                if dispatch_deny:
+                    existing_deny = list(effective_filter.deny_names) if effective_filter.deny_names else []
+                    effective_filter = CapabilityFilter(
+                        allow_names=list(DISPATCH_TOOL_NAMES),
+                        deny_names=list(dict.fromkeys(existing_deny + dispatch_deny)) or None,
+                    )
 
         scheduler_cfg = load_scheduler_config()
         if agent_cfg:
@@ -243,9 +266,10 @@ class ConversationTurnService:
             "data": json.dumps(
                 {
                     "step": 0,
-                    "description": f"Scheduler selected: {schedule.mode}",
+                    "description": f"调度模式: {schedule.mode} | 循环模式: {agent_loop_mode}",
                     "schedulerMode": schedule.mode,
                     "executionPlan": execution_plan.to_event_payload(),
+                    "loopMode": agent_loop_mode,
                 }
             ),
         }
@@ -256,6 +280,7 @@ class ConversationTurnService:
             extra_system=extra_system,
             limits=limits,
             model=llm_model,
+            loop_mode=agent_loop_mode,
         )
 
         accumulated_text = ""

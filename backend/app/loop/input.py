@@ -30,4 +30,6 @@ class LoopRunInput:
     limits: Optional[LoopLimits] = None
     """Resolved model name (matches rows in models table / OpenAI model id)."""
     model: Optional[str] = None
+    # 循环执行模式，影响 run_loop() 内部的路由逻辑
+    loop_mode: str = "react"
 

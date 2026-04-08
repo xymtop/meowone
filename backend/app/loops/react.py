@@ -47,11 +47,13 @@ class ReActLoop(BaseLoop):
         max_steps = config.get("max_steps", 10)
 
         # 构建 Loop 输入
+        from app.loop.runtime import DEFAULT_LOOP_MODE
         loop_input = LoopRunInput(
             user_message=user_input,
             history=history,
             message_id=context.get("message_id"),
             model=context.get("model", ""),
+            loop_mode=context.get("loop_mode") or DEFAULT_LOOP_MODE,
         )
 
         try:
