@@ -281,7 +281,6 @@ export default function LogsPage() {
           
           {/* 搜索框 */}
           <div className="relative flex-1 min-w-[200px] max-w-md">
-            <SearchIcon />
             <input
               type="text"
               value={searchQuery}

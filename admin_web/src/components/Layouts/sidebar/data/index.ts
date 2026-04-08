@@ -43,112 +43,85 @@ export const NAV_DATA: NavSection[] = [
       {
         title: "我的智能体",
         url: "/meowone/agents",
-        icon: Icons.User,
+        icon: Icons.BotIcon,
         items: [],
       },
       {
-        title: "创建智能体",
-        url: "/meowone/agents/create",
-        icon: Icons.PieChart,
-        items: [],
-      },
-    ],
-  },
-  {
-    label: "智能体镜像",
-    items: [
-      {
-        title: "镜像列表",
-        url: "/meowone/images",
-        icon: Icons.FourCircle,
-        items: [],
-      },
-      {
-        title: "创建镜像",
-        url: "/meowone/images/create",
-        icon: Icons.PieChart,
-        items: [],
-      },
-    ],
-  },
-  {
-    label: "智能体实例",
-    items: [
-      {
-        title: "实例列表",
-        url: "/meowone/instances",
-        icon: Icons.User,
-        items: [],
-      },
-      {
-        title: "创建实例",
-        url: "/meowone/instances/create",
-        icon: Icons.PieChart,
-        items: [],
-      },
-    ],
-  },
-  {
-    label: "基础配置",
-    items: [
-      {
-        title: "MCP 服务",
+        title: "MCP管理",
         url: "/meowone/capabilities-mcp",
-        icon: Icons.Authentication,
+        icon: Icons.PuzzleIcon,
         items: [],
       },
       {
         title: "技能管理",
         url: "/meowone/capabilities-skills",
-        icon: Icons.Alphabet,
+        icon: Icons.CodeIcon,
         items: [],
       },
       {
         title: "提示词管理",
         url: "/meowone/capabilities-prompts",
-        icon: Icons.Alphabet,
+        icon: Icons.FileTextIcon,
         items: [],
       },
       {
-        title: "模型配置",
+        title: "模型管理",
         url: "/meowone/models",
-        icon: Icons.FourCircle,
+        icon: Icons.PieChart,
+        items: [],
+      },
+      {
+        title: "Loop管理",
+        url: "/meowone/scheduler/loops",
+        icon: Icons.StackIcon,
         items: [],
       },
     ],
   },
   {
-    label: "调度配置",
+    label: "智能体OS",
     items: [
       {
-        title: "Loop 管理",
-        url: "/meowone/scheduler/loops",
-        icon: Icons.Calendar,
+        title: "我的实例",
+        url: "/meowone/instances",
+        icon: Icons.User,
+        items: [],
+      },
+      {
+        title: "镜像管理",
+        url: "/meowone/images",
+        icon: Icons.ImageIcon,
         items: [],
       },
       {
         title: "调度策略",
         url: "/meowone/scheduler/strategies",
-        icon: Icons.PieChart,
+        icon: Icons.RouteIcon,
         items: [],
       },
       {
         title: "执行环境",
         url: "/meowone/scheduler/environments",
-        icon: Icons.FourCircle,
+        icon: Icons.CloudIcon,
+        items: [],
+      },
+      {
+        title: "会话管理",
+        url: "/meowone/sessions",
+        icon: Icons.Calendar,
         items: [],
       },
     ],
   },
   {
-    label: "记录",
+    label: "系统设置",
     items: [
       {
-        title: "会话历史",
-        url: "/meowone/sessions",
-        icon: Icons.Table,
+        title: "系统日志",
+        url: "/meowone/logs",
+        icon: Icons.SettingsIcon,
         items: [],
-      }
+      },
     ],
   },
 ];

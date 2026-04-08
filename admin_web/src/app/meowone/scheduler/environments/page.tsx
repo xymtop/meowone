@@ -86,6 +86,7 @@ export default function EnvironmentsPage() {
     sandbox_type: "native",
     max_rounds: 10,
     timeout_seconds: 300,
+    api_key: "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -115,9 +116,10 @@ export default function EnvironmentsPage() {
         sandbox_type: form.sandbox_type,
         max_rounds: form.max_rounds,
         timeout_seconds: form.timeout_seconds,
+        api_key: form.api_key,
       });
       setShowCreateModal(false);
-      setForm({ name: "", description: "", sandbox_type: "native", max_rounds: 10, timeout_seconds: 300 });
+      setForm({ name: "", description: "", sandbox_type: "native", max_rounds: 10, timeout_seconds: 300, api_key: "" });
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -317,6 +319,21 @@ export default function EnvironmentsPage() {
               className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm dark:border-dark-3 dark:bg-dark"
             />
           </div>
+          {form.sandbox_type === "e2b" && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                E2B API Key <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                value={form.api_key}
+                onChange={(e) => setForm({ ...form, api_key: e.target.value })}
+                placeholder="sk-..."
+                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm dark:border-dark-3 dark:bg-dark"
+              />
+              <p className="mt-1 text-xs text-gray-400">从 <a href="https://e2b.dev" target="_blank" className="text-blue-500 hover:underline">e2b.dev</a> 获取 API Key</p>
+            </div>
+          )}
           <div className="flex justify-end gap-3 pt-2">
             <button
               onClick={() => setShowCreateModal(false)}

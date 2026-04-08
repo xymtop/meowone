@@ -343,6 +343,7 @@ class EnvironmentCreate(BaseModel):
     denied_tools: Optional[List[str]] = None
     max_rounds: int = 10
     timeout_seconds: int = 300
+    api_key: str = ""
 
 
 class EnvironmentUpdate(BaseModel):
@@ -356,6 +357,7 @@ class EnvironmentUpdate(BaseModel):
     max_rounds: Optional[int] = None
     timeout_seconds: Optional[int] = None
     enabled: Optional[bool] = None
+    api_key: Optional[str] = None
 
 
 @router.post("/environments", response_model=Dict[str, Any])
@@ -372,6 +374,7 @@ async def create_environment(body: EnvironmentCreate):
         denied_tools=body.denied_tools,
         max_rounds=body.max_rounds,
         timeout_seconds=body.timeout_seconds,
+        api_key=body.api_key,
     )
     return {"ok": True, "environment": env}
 
@@ -404,6 +407,7 @@ async def update_environment(env_id: str, body: EnvironmentUpdate):
         max_rounds=body.max_rounds,
         timeout_seconds=body.timeout_seconds,
         enabled=body.enabled,
+        api_key=body.api_key,
     )
     if not env:
         raise HTTPException(status_code=404, detail="Environment not found")

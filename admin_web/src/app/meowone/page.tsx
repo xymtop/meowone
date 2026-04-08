@@ -338,55 +338,6 @@ export default function QuickStartPage() {
           </div>
         </div>
 
-        {/* 我的智能体 */}
-        {status.agents.length > 0 && (
-          <div className="mb-8">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">🎯 我的智能体</h2>
-              <Link
-                href="/meowone/agents"
-                className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
-              >
-                查看全部
-                <ArrowRightIcon />
-              </Link>
-            </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              {status.agents.map((agent) => (
-                <Link
-                  key={agent.name}
-                  href={`/meowone/agents/internal/${encodeURIComponent(agent.name)}`}
-                  className="group rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-blue-300 hover:shadow-md"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-100">
-                      <RobotIcon />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="truncate font-medium text-gray-900">{agent.name}</h3>
-                      <p className="mt-1 truncate text-sm text-gray-500">
-                        {agent.description || "暂无描述"}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {agent.mcp_servers && agent.mcp_servers.length > 0 && (
-                          <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
-                            {agent.mcp_servers.length} MCP
-                          </span>
-                        )}
-                        {agent.agent_skills && agent.agent_skills.length > 0 && (
-                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
-                            {agent.agent_skills.length} 技能
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* 能力中心 */}
         <div className="mb-8">
           <h2 className="mb-4 text-lg font-semibold text-gray-900">⚙️ 能力中心</h2>

@@ -20,6 +20,7 @@ class E2BSandboxImpl(BaseSandbox):
 
     def __init__(
         self,
+        api_key: Optional[str] = None,
         template: Optional[str] = None,
         timeout: int = 120,
         metadata: Optional[Dict] = None,
@@ -28,6 +29,7 @@ class E2BSandboxImpl(BaseSandbox):
         初始化 E2B 沙箱.
 
         Args:
+            api_key: E2B API Key（优先使用，None 时从环境变量读取）
             template: 沙箱模板，默认为 Python 3.11 环境
             timeout: 沙箱超时时间（秒）
             metadata: 元数据，用于追踪
@@ -37,9 +39,9 @@ class E2BSandboxImpl(BaseSandbox):
                 "E2B SDK 未安装，请运行: pip install e2b-code-interpreter"
             )
 
-        api_key = os.environ.get("E2B_API_KEY")
-        if not api_key:
-            raise ValueError("请设置环境变量 E2B_API_KEY")
+        self._api_key = api_key or os.environ.get("E2B_API_KEY", "")
+        if not self._api_key:
+            raise ValueError("请设置环境变量 E2B_API_KEY 或传入 api_key 参数")
 
         self._template = template
         self._timeout = timeout
@@ -50,6 +52,7 @@ class E2BSandboxImpl(BaseSandbox):
         """确保沙箱已创建（懒加载）."""
         if self._sandbox is None:
             self._sandbox = E2BSandbox(
+                api_key=self._api_key,
                 template=self._template,
                 timeout=self._timeout,
                 metadata=self._metadata,

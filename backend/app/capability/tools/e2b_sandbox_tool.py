@@ -5,9 +5,10 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.capability.tool_base import BaseTool, ToolExecutionResult
-from app.config import E2B_API_KEY, E2B_TIMEOUT_SECONDS
+from app.config import E2B_TIMEOUT_SECONDS
 from app.sandbox.base import ExecutionResult
 from app.sandbox.e2b_sandbox import E2BSandboxImpl, E2B_AVAILABLE
+from app.services.v3_service import get_environment_by_id
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,10 @@ class E2BSandboxTool(BaseTool):
                 "type": "integer",
                 "description": "超时时间（秒），默认 60",
             },
+            "environment_id": {
+                "type": "string",
+                "description": "执行环境 ID（用于从数据库配置获取 API Key）",
+            },
         },
         "required": ["action"],
         "dependencies": {
@@ -71,14 +76,14 @@ class E2BSandboxTool(BaseTool):
     def __init__(self):
         super().__init__()
         self._sandbox: Optional[E2BSandboxImpl] = None
-        self._sandbox_per_agent: Dict[str, E2BSandboxImpl] = {}
+        self._sandbox_per_env: Dict[str, E2BSandboxImpl] = {}
 
-    async def _get_sandbox(self, agent_id: Optional[str] = None) -> E2BSandboxImpl:
+    async def _get_sandbox(self, env_id: Optional[str] = None) -> E2BSandboxImpl:
         """
         获取或创建沙箱实例.
 
         Args:
-            agent_id: 可选的 Agent ID，用于为每个 Agent 创建独立沙箱
+            env_id: 可选的 Environment ID，用于从数据库获取 API Key
 
         Returns:
             E2BSandboxImpl: 沙箱实例
@@ -88,20 +93,38 @@ class E2BSandboxTool(BaseTool):
                 "E2B SDK 未安装，请运行: pip install e2b-code-interpreter"
             )
 
-        if not E2B_API_KEY:
-            raise ValueError("请设置环境变量 E2B_API_KEY")
+        api_key = ""
 
-        # 如果提供了 agent_id，为每个 Agent 创建独立沙箱
-        if agent_id:
-            if agent_id not in self._sandbox_per_agent:
-                self._sandbox_per_agent[agent_id] = E2BSandboxImpl(
-                    metadata={"agent_id": agent_id}
+        # 优先从数据库配置获取 API Key
+        if env_id:
+            try:
+                env_config = await get_environment_by_id(env_id)
+                if env_config and env_config.get("api_key"):
+                    api_key = env_config["api_key"]
+                    logger.info("从 Environment %s 获取到 E2B API Key", env_id)
+            except Exception as e:
+                logger.warning("从 Environment %s 获取 API Key 失败: %s", env_id, e)
+
+        # 如果没有从数据库获取到，使用环境变量
+        if not api_key:
+            from app.config import E2B_API_KEY
+            api_key = E2B_API_KEY
+
+        if not api_key:
+            raise ValueError("请在执行环境配置中设置 E2B API Key 或设置环境变量 E2B_API_KEY")
+
+        # 按 Environment ID 缓存沙箱实例
+        if env_id:
+            if env_id not in self._sandbox_per_env:
+                self._sandbox_per_env[env_id] = E2BSandboxImpl(
+                    api_key=api_key,
+                    metadata={"environment_id": env_id}
                 )
-            return self._sandbox_per_agent[agent_id]
+            return self._sandbox_per_env[env_id]
 
         # 共享沙箱
         if self._sandbox is None:
-            self._sandbox = E2BSandboxImpl()
+            self._sandbox = E2BSandboxImpl(api_key=api_key)
         return self._sandbox
 
     async def execute(self, params: Dict[str, Any]) -> ToolExecutionResult:
@@ -117,16 +140,16 @@ class E2BSandboxTool(BaseTool):
         action = params.get("action")
         timeout = params.get("timeout", E2B_TIMEOUT_SECONDS)
 
-        # 可选：从 params 中提取 agent_id 以支持多租户隔离
-        agent_id = params.get("agent_id")
+        # 可选：从 params 中提取 environment_id 以支持多租户隔离
+        env_id = params.get("environment_id")
 
         try:
-            sandbox = await self._get_sandbox(agent_id)
+            sandbox = await self._get_sandbox(env_id)
 
             if action == "run_code":
                 code = params.get("code", "")
                 if not code:
-                    return ToolExecutionResult(error="缺少 code 参数")
+                    return ToolExecutionResult(payload="缺少 code 参数")
 
                 result = await sandbox.run_code(code, timeout=timeout)
                 return self._format_result(result)
@@ -135,18 +158,18 @@ class E2BSandboxTool(BaseTool):
                 file_path = params.get("file_path", "")
                 file_content = params.get("file_content", "")
                 if not file_path:
-                    return ToolExecutionResult(error="缺少 file_path 参数")
+                    return ToolExecutionResult(payload="缺少 file_path 参数")
 
                 await sandbox.write_file(file_path, file_content)
-                return ToolExecutionResult(result=f"文件已写入: {file_path}")
+                return ToolExecutionResult(payload=f"文件已写入: {file_path}")
 
             elif action == "read_file":
                 file_path = params.get("file_path", "")
                 if not file_path:
-                    return ToolExecutionResult(error="缺少 file_path 参数")
+                    return ToolExecutionResult(payload="缺少 file_path 参数")
 
                 content = await sandbox.read_file(file_path)
-                return ToolExecutionResult(result=content)
+                return ToolExecutionResult(payload=content)
 
             elif action == "list_dir":
                 dir_path = params.get("dir_path", "/")
@@ -156,39 +179,39 @@ class E2BSandboxTool(BaseTool):
                     f"{'[DIR] ' if f.is_dir else '[FILE]'} {f.name} ({f.size} bytes)"
                     for f in files
                 )
-                return ToolExecutionResult(result=f"目录 {dir_path}:\n{file_list or '(空目录)'}")
+                return ToolExecutionResult(payload=f"目录 {dir_path}:\n{file_list or '(空目录)'}")
 
             elif action == "run_command":
                 command = params.get("command", "")
                 if not command:
-                    return ToolExecutionResult(error="缺少 command 参数")
+                    return ToolExecutionResult(payload="缺少 command 参数")
 
                 result = await sandbox.run_command(command, timeout=timeout)
                 return self._format_result(result)
 
             else:
                 return ToolExecutionResult(
-                    error=f"未知的 action: {action}，支持的 action: run_code, write_file, read_file, list_dir, run_command"
+                    payload=f"未知的 action: {action}，支持的 action: run_code, write_file, read_file, list_dir, run_command"
                 )
 
         except ImportError as e:
             logger.error("E2B SDK 导入失败: %s", e)
             return ToolExecutionResult(
-                error=f"E2B SDK 未安装或配置错误: {e}\n请运行: pip install e2b-code-interpreter"
+                payload=f"E2B SDK 未安装或配置错误: {e}\n请运行: pip install e2b-code-interpreter"
             )
 
         except ValueError as e:
             logger.error("E2B 配置错误: %s", e)
-            return ToolExecutionResult(error=str(e))
+            return ToolExecutionResult(payload=str(e))
 
         except Exception as e:
             logger.exception("E2B 沙箱执行失败")
-            return ToolExecutionResult(error=f"执行失败: {e}")
+            return ToolExecutionResult(payload=f"执行失败: {e}")
 
     def _format_result(self, result: ExecutionResult) -> ToolExecutionResult:
         """格式化执行结果."""
         if result.error:
-            return ToolExecutionResult(error=result.error)
+            return ToolExecutionResult(payload=result.error)
 
         output_parts = []
 
@@ -208,7 +231,7 @@ class E2BSandboxTool(BaseTool):
 
         output = "\n".join(output_parts) if output_parts else "(无输出)"
 
-        return ToolExecutionResult(result=output)
+        return ToolExecutionResult(payload=output)
 
     async def close(self) -> None:
         """关闭所有沙箱实例."""
@@ -216,6 +239,6 @@ class E2BSandboxTool(BaseTool):
             await self._sandbox.close()
             self._sandbox = None
 
-        for sandbox in self._sandbox_per_agent.values():
+        for sandbox in self._sandbox_per_env.values():
             await sandbox.close()
-        self._sandbox_per_agent.clear()
+        self._sandbox_per_env.clear()

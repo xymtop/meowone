@@ -641,6 +641,14 @@ function MenuIcon() {
   );
 }
 
+function ChatBubbleIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
+      <path strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+    </svg>
+  );
+}
+
 function CloseIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
@@ -720,7 +728,7 @@ function InstanceSelector({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-sm transition-colors hover:bg-gray-50"
+        className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-[#1d2129] shadow-sm transition-all hover:bg-gray-50 hover:border-gray-300"
       >
         <ServerIcon />
         <span className="font-medium">{getDisplayName()}</span>
@@ -1104,13 +1112,13 @@ function ChatContent() {
     <div
       className={cn("grid h-full min-h-0 flex-1 grid-cols-1 overflow-hidden bg-[#f5f6f7]", historyCollapsed ? "md:grid-cols-1" : "md:grid-cols-[268px_1fr]")}
     >
-      <aside className={cn("hidden min-h-0 flex-col border-r border-[#e9edf3] bg-[#f7f8fa] md:flex", historyCollapsed && "md:hidden")}>
+      <aside className={cn("hidden min-h-0 flex-col border-r border-gray-100 bg-[#fafbfc] md:flex", historyCollapsed && "md:hidden")}>
         <div className={`flex items-center ${historyCollapsed ? "justify-center px-1" : "justify-between px-3"} pb-2 pt-3`}>
           {!historyCollapsed ? (
           <button
             title="新建会话"
             aria-label="新建会话"
-            className="flex size-9 items-center justify-center rounded-[10px] text-[#4e5969] transition-colors hover:bg-[#e9edf3] hover:text-[#1d2129]"
+            className="flex size-9 items-center justify-center rounded-xl text-[#4e5969] transition-colors hover:bg-gray-100 hover:text-[#1d2129]"
             onClick={async () => {
               const created = await meowoneApi.createSession();
               await loadSessions();
@@ -1123,7 +1131,7 @@ function ChatContent() {
           <button
             title={historyCollapsed ? "展开历史栏" : "收起历史栏"}
             aria-label={historyCollapsed ? "展开历史栏" : "收起历史栏"}
-            className="flex size-9 items-center justify-center rounded-[10px] text-[#4e5969] transition-colors hover:bg-[#e9edf3] hover:text-[#1d2129]"
+            className="flex size-9 items-center justify-center rounded-xl text-[#4e5969] transition-colors hover:bg-gray-100 hover:text-[#1d2129]"
             onClick={() => setHistoryCollapsed((v) => !v)}
           >
             <SidebarToggleIcon collapsed={historyCollapsed} />
@@ -1136,25 +1144,33 @@ function ChatContent() {
             type="search"
             readOnly
             placeholder="搜索历史对话"
-            className="w-full rounded-[10px] border-0 bg-white py-2 pl-3 pr-2 text-[12px] text-[#1d2129] shadow-[0_0_0_1px_rgba(0,0,0,0.05)] placeholder:text-[#c9cdd4] outline-none"
+            className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-3 pr-2 text-[12px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
         </div>
         <div className="px-3 pb-1 text-[11px] font-medium uppercase tracking-[0.06em] text-[#86909c]">历史对话</div>
-        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           {sessions.map((s) => {
             const active = sessionId === s.id;
             return (
               <button
                 key={s.id}
-                className={`group mb-1 block w-full truncate rounded-[10px] px-3 py-2 text-left text-[13px] ${active ? "bg-white font-medium text-[#1d2129] shadow-[0_0_0_1px_rgba(0,0,0,0.06)]" : "text-[#4e5969] hover:bg-[#eceff3] hover:text-[#1d2129]"}`}
+                className={cn(
+                  "group mb-1 flex w-full items-center gap-2 truncate rounded-xl px-3 py-2.5 text-left text-[13px] transition-all",
+                  active
+                    ? "bg-white font-medium text-[#1d2129] shadow-[0_2px_8px_rgba(0,0,0,0.07)]"
+                    : "text-[#4e5969] hover:bg-gray-100 hover:text-[#1d2129]"
+                )}
                 onClick={() => setSessionId(s.id)}
               >
+                <span className={active ? "text-blue-500" : "text-[#d0d5dd]"}>
+                  <ChatBubbleIcon />
+                </span>
                 <span className="inline-flex w-full items-center justify-between gap-2">
                   <span className="truncate">{s.title || "新对话"}</span>
                   <span
                     role="button"
                     tabIndex={0}
-                    className="hidden rounded p-0.5 text-[#9aa0a6] hover:bg-black/[0.04] hover:text-[#ef4444] group-hover:inline-flex"
+                    className="hidden rounded p-0.5 text-[#9aa0a6] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-50 hover:text-red-500"
                     onClick={async (e) => {
                       e.stopPropagation();
                       await meowoneApi.deleteSession(s.id);
@@ -1178,14 +1194,19 @@ function ChatContent() {
         </div>
           </>
         ) : (
-          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-1 pb-3">
+          <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-1 pb-4">
             {sessions.map((s, idx) => {
               const active = sessionId === s.id;
               return (
                 <button
                   key={s.id}
                   title={s.title || "新对话"}
-                  className={`mb-1 flex h-9 w-full items-center justify-center rounded-[10px] text-[12px] ${active ? "bg-white text-[#1d2129]" : "text-[#4e5969] hover:bg-[#eceff3]"}`}
+                  className={cn(
+                    "mb-1 flex h-10 w-full items-center justify-center rounded-xl text-[12px] transition-all",
+                    active
+                      ? "bg-white text-[#1d2129] shadow-[0_2px_8px_rgba(0,0,0,0.07)] font-medium"
+                      : "text-[#4e5969] hover:bg-gray-100"
+                  )}
                   onClick={() => setSessionId(s.id)}
                 >
                   {idx + 1}
@@ -1198,18 +1219,18 @@ function ChatContent() {
 
       {mobileSidebarOpen ? (
         <div className="fixed inset-0 z-40 bg-black/35 md:hidden" onClick={() => setMobileSidebarOpen(false)}>
-          <div className="h-full w-[260px] bg-[#f7f8fa] p-2" onClick={(e) => e.stopPropagation()}>
+          <div className="h-full w-[260px] bg-[#fafbfc] p-2" onClick={(e) => e.stopPropagation()}>
             <div className="mb-2 flex items-center justify-between px-1">
               <button
                 type="button"
-                className="flex size-8 items-center justify-center rounded-[8px] text-[#4e5969] hover:bg-[#e9edf3]"
+                className="flex size-8 items-center justify-center rounded-xl text-[#4e5969] hover:bg-gray-100"
                 onClick={() => setMobileSidebarOpen(false)}
               >
                 <CloseIcon />
               </button>
               <button
                 type="button"
-                className="flex size-8 items-center justify-center rounded-[8px] text-[#4e5969] hover:bg-[#e9edf3]"
+                className="flex size-8 items-center justify-center rounded-xl text-[#4e5969] hover:bg-gray-100"
                 onClick={async () => {
                   const created = await meowoneApi.createSession();
                   await loadSessions();
@@ -1226,13 +1247,16 @@ function ChatContent() {
                 return (
                   <button
                     key={`mobile-${s.id}`}
-                    className={`mb-1 block w-full truncate rounded-[10px] px-3 py-2 text-left text-[13px] ${active ? "bg-white font-medium text-[#1d2129]" : "text-[#4e5969] hover:bg-[#eceff3]"}`}
+                    className={`group mb-1 flex w-full items-center gap-2 truncate rounded-xl px-3 py-2.5 text-left text-[13px] ${active ? "bg-white font-medium text-[#1d2129] shadow-sm" : "text-[#4e5969] hover:bg-gray-100"}`}
                     onClick={() => {
                       setSessionId(s.id);
                       setMobileSidebarOpen(false);
                     }}
                   >
-                    {s.title || "新对话"}
+                    <span className={active ? "text-blue-500" : "text-[#d0d5dd]"}>
+                      <ChatBubbleIcon />
+                    </span>
+                    <span className="truncate">{s.title || "新对话"}</span>
                   </button>
                 );
               })}
@@ -1243,7 +1267,7 @@ function ChatContent() {
 
       <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
         {/* 实例选择栏 */}
-        <div className="border-b border-[#e5e7eb] bg-white px-4 py-3">
+        <div className="border-b border-gray-100 bg-gradient-to-r from-white to-gray-50 px-4 py-3">
           <div className="mx-auto flex w-full max-w-[760px] flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <InstanceSelector
@@ -1287,10 +1311,10 @@ function ChatContent() {
           </div>
         </div>
 
-        <header className="relative border-b border-[#e5e7eb] px-4 py-2 text-center">
+        <header className="relative border-b border-gray-100 bg-gray-50/50 px-4 py-2.5 text-center">
           <button
             type="button"
-            className="absolute left-4 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-[9px] text-[#4e5969] hover:bg-[#f5f6f7] md:hidden"
+            className="absolute left-4 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-xl text-[#4e5969] hover:bg-gray-100 md:hidden"
             onClick={() => setMobileSidebarOpen(true)}
             aria-label="打开会话列表"
           >
@@ -1300,7 +1324,7 @@ function ChatContent() {
             <button
               title="展开历史栏"
               aria-label="展开历史栏"
-              className="absolute left-4 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-[9px] text-[#4e5969] transition-colors hover:bg-[#f5f6f7] hover:text-[#1d2129]"
+              className="absolute left-4 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-xl text-[#4e5969] transition-all hover:bg-gray-100 hover:text-[#1d2129]"
               onClick={() => setHistoryCollapsed(false)}
             >
               <SidebarToggleIcon collapsed />
@@ -1313,7 +1337,7 @@ function ChatContent() {
           <div className="mx-auto w-full max-w-[760px] space-y-4">
             {!hasConversation ? (
               <div className="px-2 pb-10 pt-8 text-center sm:pt-14">
-                <div className="mb-6 flex size-16 mx-auto items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                <div className="mb-6 flex size-18 mx-auto items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white ring-8 ring-blue-50">
                   <ServerIcon />
                 </div>
                 <h2 className="text-[32px] font-semibold tracking-tight text-[#1d2129]">
@@ -1340,7 +1364,7 @@ function ChatContent() {
                     <button
                       key={item}
                       onClick={() => setPrompt(item)}
-                      className="rounded-full border border-[#e5e6eb] bg-white px-4 py-2 text-[13px] text-[#4e5969] hover:border-[#c9cdd4] hover:text-[#1d2129]"
+                      className="rounded-xl border border-[#e5e6eb] bg-white px-4 py-2 text-[13px] text-[#4e5969] transition-all hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 hover:shadow-md"
                     >
                       {item}
                     </button>
@@ -1352,7 +1376,7 @@ function ChatContent() {
               if (m.role !== "assistant") {
                 return (
                   <div key={m.id} className="flex justify-end mb-6">
-                    <div className="relative max-w-[80%] overflow-visible rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 px-6 py-4 pr-12 text-[15px] leading-7 text-white shadow-[0_4px_16px_rgba(59,130,246,0.25)]">
+                    <div className="relative max-w-[80%] overflow-visible rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 px-6 py-4 pr-12 text-[14px] leading-6 text-white shadow-[0_4px_20px_rgba(59,130,246,0.3)]">
                       <CopyMessageButton text={m.content || ""} variant="user" />
                       <div className="whitespace-pre-wrap">{m.content}</div>
                     </div>
@@ -1365,7 +1389,7 @@ function ChatContent() {
               if (!hasA2UI) {
                 return (
                   <div key={m.id} className="flex justify-start mb-6">
-                    <div className="relative w-full max-w-[80%] overflow-visible rounded-2xl border border-gray-100 bg-white px-6 py-4 pr-12 text-[15px] leading-7 text-[#1d2129] shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                    <div className="relative w-full max-w-[80%] overflow-visible rounded-2xl border border-gray-100 bg-white px-6 py-4 pr-12 text-[14px] leading-6 text-[#1d2129] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
                       <CopyMessageButton text={m.content || ""} variant="assistant" />
                       <RichContent content={m.content || ""} onA2UIAction={handleA2UIAction} />
                     </div>
@@ -1388,7 +1412,7 @@ function ChatContent() {
                           );
                         }
                         return (
-                          <div key={`${m.id}-a2ui-${idx}`} className="a2ui-standalone-card not-prose relative z-30 w-full overflow-visible rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                          <div key={`${m.id}-a2ui-${idx}`} className="a2ui-standalone-card not-prose relative z-30 w-full overflow-visible rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
                             <A2UIProvider messages={a2msgs} catalog={meowoneCatalog}>
                               <A2UIRenderer onAction={handleA2UIAction} />
                             </A2UIProvider>
@@ -1397,13 +1421,13 @@ function ChatContent() {
                       }
                       if (part.type === "mermaid") {
                         return (
-                          <div key={`${m.id}-mermaid-${idx}`} className="w-full rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                          <div key={`${m.id}-mermaid-${idx}`} className="w-full rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
                             <MermaidBlock source={part.value} />
                           </div>
                         );
                       }
                       return (
-                        <div key={`${m.id}-md-${idx}`} className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-3.5 text-[15px] leading-7 text-[#1d2129] shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                        <div key={`${m.id}-md-${idx}`} className="w-full rounded-2xl border border-gray-100 bg-white px-5 py-3.5 text-[14px] leading-6 text-[#1d2129] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
                           <RichContent content={part.value} onA2UIAction={handleA2UIAction} />
                         </div>
                       );
@@ -1413,7 +1437,7 @@ function ChatContent() {
               );
             })}
             {streamingTools.length ? (
-              <div className="max-w-[80%] rounded-xl border border-blue-100 bg-blue-50/80 px-5 py-3.5 text-[13px] text-blue-800 mb-6 shadow-sm">
+              <div className="max-w-[80%] rounded-2xl border border-blue-100 bg-blue-50 px-5 py-3.5 text-[13px] text-blue-800 mb-6 shadow-sm">
                 <div className="mb-2 font-medium">工具调用</div>
                 <div className="flex flex-wrap gap-2">
                   {streamingTools.map((t, idx) => (
@@ -1435,31 +1459,31 @@ function ChatContent() {
             ) : null}
             {streaming ? (
               <div className="flex justify-start mb-6">
-                <div className="relative w-full max-w-[80%] overflow-visible rounded-2xl border border-gray-100 bg-white px-6 py-4 pr-12 text-[15px] leading-7 text-[#1d2129] shadow-[0_2px_12px_rgba(0,0,0,0.06)]">
+                <div className="relative w-full max-w-[80%] overflow-visible rounded-2xl border border-gray-100 bg-white px-6 py-4 pr-12 text-[14px] leading-6 text-[#1d2129] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
                   <CopyMessageButton text={streaming} variant="assistant" />
                   <RichContent content={streaming} onA2UIAction={handleA2UIAction} />
                 </div>
               </div>
             ) : null}
             {thinking ? (
-              <div className="max-w-[80%] rounded-xl border border-gray-100 bg-gray-50 px-5 py-3 text-[13px] text-gray-500 mb-6 shadow-sm">
+              <div className="max-w-[80%] rounded-xl border border-gray-100 bg-slate-50 px-5 py-3 text-[13px] text-slate-500 mb-6 shadow-sm">
                 <div className="flex items-center gap-2">
                   <div className="flex gap-1">
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:0ms]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:150ms]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:300ms]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:0ms]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:300ms]" />
                   </div>
                   <span>{thinking}</span>
                 </div>
               </div>
             ) : null}
-            {error ? <p className="text-sm text-red">{error}</p> : null}
+            {error ? <p className="text-sm text-red-500">{error}</p> : null}
           </div>
         </div>
 
-        <div className="border-t border-[#e5e7eb] bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
+        <div className="border-t border-gray-100 bg-white px-4 py-4 sm:px-6">
           <div className="mx-auto w-full max-w-[760px]">
-            <div className="rounded-[20px] border border-[#e5e7eb] bg-white px-3 py-2.5 shadow-[0_6px_20px_rgba(29,33,41,0.08)]">
+            <div className="rounded-2xl border border-gray-200 bg-white px-3 py-2.5 shadow-[0_4px_24px_rgba(59,130,246,0.1)]">
               <div className="flex items-end gap-2">
                 <textarea
                   ref={textareaRef}
@@ -1477,7 +1501,7 @@ function ChatContent() {
                   placeholder={currentInstanceName ? "输入消息..." : "选择实例后开始对话"}
                   rows={1}
                   disabled={!selectedInstanceId}
-                  className="max-h-40 min-h-[48px] w-full resize-none border-0 bg-transparent py-2.5 text-[15px] font-normal leading-7 text-[#1d2129] antialiased outline-none placeholder:text-[#9aa0a6] placeholder:text-[14px] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="max-h-40 min-h-[48px] w-full resize-none border-0 bg-transparent py-2.5 text-[14px] font-normal leading-6 text-[#1d2129] antialiased outline-none placeholder:text-[#9aa0a6] disabled:cursor-not-allowed disabled:opacity-50"
                   onKeyDown={async (e) => {
                     if (composingRef.current || (e.nativeEvent as KeyboardEvent).isComposing) return;
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -1490,7 +1514,7 @@ function ChatContent() {
                   <button
                     type="button"
                     onClick={stopGenerating}
-                    className="mb-0.5 flex size-10 items-center justify-center rounded-full bg-[#eef2f7] text-[#4e5969] transition-colors hover:bg-[#e7edf5]"
+                    className="mb-0.5 flex size-10 items-center justify-center rounded-full bg-gray-100 text-[#4e5969] transition-colors hover:bg-gray-200"
                     title="停止生成"
                     aria-label="停止生成"
                   >
@@ -1499,7 +1523,7 @@ function ChatContent() {
                 ) : (
                   <button
                     type="button"
-                    className="mb-0.5 flex size-10 items-center justify-center rounded-full bg-[#2f7dff] text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    className="mb-0.5 flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 text-white transition-all hover:from-blue-600 hover:to-indigo-600 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={!prompt.trim() || loading || !selectedInstanceId}
                     onClick={send}
                     aria-label="发送"

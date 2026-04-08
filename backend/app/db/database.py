@@ -410,6 +410,7 @@ async def init_db() -> None:
         await _migrate_v3_tables(db)
         await _migrate_agent_images_table(db)
         await _migrate_agent_instances_table(db)
+        await _migrate_environments_table(db)
         await _seed_v3_system_records(db)
         await db.execute(_INSERT_DEFAULT_USER)
         await db.commit()
@@ -496,6 +497,15 @@ async def _migrate_agent_images_table(db: aiosqlite.Connection) -> None:
         await db.execute("ALTER TABLE agent_images ADD COLUMN metadata_json TEXT DEFAULT '{}'")
     if "enabled" not in cols:
         await db.execute("ALTER TABLE agent_images ADD COLUMN enabled INTEGER DEFAULT 1")
+
+
+async def _migrate_environments_table(db: aiosqlite.Connection) -> None:
+    """environments 表的迁移：添加 api_key 字段"""
+    cur = await db.execute("PRAGMA table_info(environments)")
+    rows = await cur.fetchall()
+    cols = {str(r[1]) for r in rows}
+    if "api_key" not in cols:
+        await db.execute("ALTER TABLE environments ADD COLUMN api_key TEXT DEFAULT ''")
 
 
 async def _migrate_agent_instances_table(db: aiosqlite.Connection) -> None:

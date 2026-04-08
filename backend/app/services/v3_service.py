@@ -472,6 +472,7 @@ async def create_environment(
     denied_tools: Optional[List[str]] = None,
     max_rounds: int = 10,
     timeout_seconds: int = 300,
+    api_key: str = "",
 ) -> Dict[str, Any]:
     env_id = str(uuid.uuid4())
     async with get_db() as db:
@@ -480,9 +481,9 @@ async def create_environment(
             INSERT INTO environments (
                 id, name, description, sandbox_type, sandbox_config_json,
                 resource_limits_json, allowed_tools_json, denied_tools_json,
-                max_rounds, timeout_seconds, enabled
+                max_rounds, timeout_seconds, enabled, api_key
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
             """,
             (
                 env_id,
@@ -495,6 +496,7 @@ async def create_environment(
                 json.dumps(denied_tools or [], ensure_ascii=False),
                 max_rounds,
                 timeout_seconds,
+                api_key,
             ),
         )
         await db.commit()
@@ -534,6 +536,7 @@ async def update_environment(
     max_rounds: Optional[int] = None,
     timeout_seconds: Optional[int] = None,
     enabled: Optional[bool] = None,
+    api_key: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     existing = await get_environment_by_id(env_id)
     if not existing:
@@ -570,6 +573,9 @@ async def update_environment(
     if enabled is not None:
         updates.append("enabled = ?")
         params.append(1 if enabled else 0)
+    if api_key is not None:
+        updates.append("api_key = ?")
+        params.append(api_key)
     if not updates:
         return existing
     updates.append("updated_at = datetime('now')")
@@ -585,6 +591,12 @@ async def update_environment(
 
 async def delete_environment(env_id: str) -> bool:
     async with get_db() as db:
+        # 先解除 agent_images 对该环境的引用
+        await db.execute(
+            "UPDATE agent_images SET environment_id = NULL WHERE environment_id = ?",
+            (env_id,),
+        )
+        # 再删除环境记录
         cur = await db.execute("DELETE FROM environments WHERE id = ?", (env_id,))
         await db.commit()
     return (cur.rowcount or 0) > 0

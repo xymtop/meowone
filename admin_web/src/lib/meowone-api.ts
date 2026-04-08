@@ -815,6 +815,7 @@ export const meowoneApi = {
     denied_tools?: string[];
     max_rounds?: number;
     timeout_seconds?: number;
+    api_key?: string;
   }) =>
     request<{ ok: boolean; environment: Record<string, unknown> }>("/api/v3/environments", {
       method: "POST",
@@ -831,6 +832,7 @@ export const meowoneApi = {
     max_rounds?: number;
     timeout_seconds?: number;
     enabled?: boolean;
+    api_key?: string;
   }) =>
     request<{ ok: boolean; environment: Record<string, unknown> }>(
       `/api/v3/environments/${encodeURIComponent(envId)}`,
