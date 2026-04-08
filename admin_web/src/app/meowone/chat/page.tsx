@@ -2,11 +2,13 @@
 
 import { A2UIProvider, A2UIRenderer, standardCatalog, useDataBinding, useDispatchAction, type A2UIAction } from "@a2ui-sdk/react/0.8";
 import type { A2UIMessage } from "@a2ui-sdk/types/0.8";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import Markdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
-import { meowoneApi, type ChatEvent, type Message, type Session } from "@/lib/meowone-api";
+import { meowoneApi, type AgentsListResponse, type ChatEvent, type Message, type Session } from "@/lib/meowone-api";
 import { cn } from "@/lib/utils";
 
 type Segment = { type: "markdown" | "a2ui" | "mermaid"; value: string };
@@ -23,7 +25,6 @@ function looksLikeA2UIPayload(text: string): boolean {
 function parseSegments(content: string): Segment[] {
   const chunks: Segment[] = [];
 
-  // 1) Split custom transport blocks: ---A2UI-START--- ... ---A2UI-END---
   let pos = 0;
   while (pos < content.length) {
     const startIdx = content.indexOf(A2UI_BLOCK_START, pos);
@@ -42,7 +43,6 @@ function parseSegments(content: string): Segment[] {
     pos = endIdx + A2UI_BLOCK_END.length;
   }
 
-  // 2) Further split markdown chunks by fenced blocks.
   const out: Segment[] = [];
   const fenceRe = /```([a-zA-Z0-9_-]*)\s*\n([\s\S]*?)```/g;
   for (const seg of chunks.length ? chunks : [{ type: "markdown", value: content } as Segment]) {
@@ -163,7 +163,6 @@ function parseA2UIMessages(raw: string): A2UIMessage[] {
     try {
       return JSON.parse(t) as unknown;
     } catch {
-      // Model output often has trailing commas.
       let fixed = t;
       for (let i = 0; i < 8; i++) {
         const next = fixed.replace(/,(\s*[}\]])/g, "$1");
@@ -244,7 +243,6 @@ function parseA2UIMessages(raw: string): A2UIMessage[] {
 
   const ensureRenderable = (messages: A2UIMessage[]): A2UIMessage[] => {
     let out = [...messages];
-    // Heuristic: if only one explicit surface exists, treat "default" surfaceUpdate as that surface.
     const explicitBegins = out
       .map((m) => (m as unknown as Record<string, any>).beginRendering?.surfaceId)
       .filter((x) => typeof x === "string" && x && x !== "default") as string[];
@@ -293,7 +291,6 @@ function parseA2UIMessages(raw: string): A2UIMessage[] {
       }
       inject.push(m);
     }
-    // Fix invalid/empty root: point to first component id in same surface.
     return inject.map((m) => {
       const br = (m as unknown as Record<string, any>).beginRendering;
       if (!br?.surfaceId) return m;
@@ -308,11 +305,9 @@ function parseA2UIMessages(raw: string): A2UIMessage[] {
     });
   };
 
-  // Parse whole JSON first.
   const parsed = tryParseJSON(src);
   if (parsed !== null) return ensureRenderable(expandAny(parsed));
 
-  // Fallback: JSONL / SSE lines.
   const lines = src
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -346,7 +341,6 @@ function normalizeA2UIMessages(messages: A2UIMessage[]): A2UIMessage[] {
     const [name, rawProps] = entries[0];
     const props = ((rawProps ?? {}) as Record<string, unknown>) || {};
 
-    // alias common model names
     const componentName = name === "Select" || name === "Dropdown" ? "MultipleChoice" : name;
 
     if (componentName === "Text") {
@@ -531,6 +525,15 @@ function RichContent({ content, onA2UIAction }: { content: string; onA2UIAction?
   );
 }
 
+// ============ 新增图标组件 ============
+function PlusIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+  );
+}
+
 function SendIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden className="text-white">
@@ -594,7 +597,126 @@ function TrashIcon() {
   );
 }
 
+function ChevronDownIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
+function RobotIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+    </svg>
+  );
+}
+
+// ============ Agent 选择器组件 ============
+function AgentSelector({
+  agents,
+  selectedAgent,
+  onSelect,
+  onCreateNew,
+}: {
+  agents: { name: string; description?: string; agent_type?: string }[];
+  selectedAgent: string;
+  onSelect: (name: string) => void;
+  onCreateNew: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const currentAgent = agents.find((a) => a.name === selectedAgent);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-sm transition-colors hover:bg-gray-50"
+      >
+        <RobotIcon />
+        <span className="font-medium">{currentAgent?.name || "选择智能体"}</span>
+        <ChevronDownIcon />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-xl border border-gray-200 bg-white shadow-lg">
+          <div className="max-h-64 overflow-y-auto p-1">
+            {agents.length === 0 ? (
+              <div className="px-3 py-4 text-center text-sm text-gray-500">
+                还没有智能体
+              </div>
+            ) : (
+              agents.map((agent) => (
+                <button
+                  key={agent.name}
+                  onClick={() => {
+                    onSelect(agent.name);
+                    setIsOpen(false);
+                  }}
+                  className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
+                    agent.name === selectedAgent
+                      ? "bg-blue-50 text-blue-600"
+                      : "hover:bg-gray-50"
+                  }`}
+                >
+                  <RobotIcon />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{agent.name}</p>
+                    <p className="truncate text-xs text-gray-500">{agent.description || "暂无描述"}</p>
+                  </div>
+                  {agent.name === selectedAgent && (
+                    <span className="size-2 shrink-0 rounded-full bg-blue-500" />
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+          <div className="border-t border-gray-100 p-1">
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                onCreateNew();
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-blue-600 transition-colors hover:bg-blue-50"
+            >
+              <PlusIcon />
+              创建新智能体
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ 主组件 ============
+type AgentInfo = {
+  name: string;
+  description?: string;
+  agent_type?: string;
+  mcp_servers?: string[];
+  agent_skills?: string[];
+  enabled?: boolean;
+};
+
 export default function MeowChatPage() {
+  const searchParams = useSearchParams();
+  const paramAgent = searchParams.get("agent");
+
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -614,6 +736,24 @@ export default function MeowChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composingRef = useRef(false);
 
+  // Agent 相关状态
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<string>(paramAgent || "");
+
+  const loadAgents = useCallback(async () => {
+    try {
+      const res = await meowoneApi.listAgents("internal");
+      const agentList = (res.agents || []) as AgentInfo[];
+      setAgents(agentList);
+      // 如果没有选择智能体但有可用的，选择第一个
+      if (!selectedAgent && agentList.length > 0) {
+        setSelectedAgent(agentList[0].name);
+      }
+    } catch (e) {
+      console.error("加载智能体失败:", e);
+    }
+  }, [selectedAgent]);
+
   const loadSessions = async () => {
     const list = await meowoneApi.listSessions();
     setSessions(list);
@@ -621,6 +761,7 @@ export default function MeowChatPage() {
   };
 
   useEffect(() => {
+    void loadAgents();
     loadSessions().catch((e: Error) => setError(e.message));
     meowoneApi
       .listModels()
@@ -629,7 +770,7 @@ export default function MeowChatPage() {
         setDefaultModelName(String((found as Record<string, unknown> | undefined)?.name || "未配置"));
       })
       .catch(() => setDefaultModelName("未配置"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -717,7 +858,12 @@ export default function MeowChatPage() {
       },
     ]);
     try {
-      await meowoneApi.streamChat(targetSessionId, { content: text, channel_id: "web" }, onStreamEvent, {
+      await meowoneApi.streamChat(targetSessionId, { 
+        content: text, 
+        channel_id: "web",
+        agent_name: selectedAgent || undefined,
+        agent_type: "internal",
+      }, onStreamEvent, {
         signal: controller.signal,
       });
       const fresh = await meowoneApi.listMessages(targetSessionId);
@@ -778,6 +924,7 @@ export default function MeowChatPage() {
   };
 
   const currentTitle = sessions.find((s) => s.id === sessionId)?.title || "新对话";
+  const currentAgentInfo = agents.find((a) => a.name === selectedAgent);
   const hasConversation = messages.length > 0 || Boolean(streaming);
   const suggestionPrompts = [
     "帮我总结一下今天的工作重点",
@@ -935,6 +1082,44 @@ export default function MeowChatPage() {
       ) : null}
 
       <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+        {/* Agent 选择栏 */}
+        <div className="border-b border-[#e5e7eb] bg-white px-4 py-3">
+          <div className="mx-auto flex w-full max-w-[760px] flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <AgentSelector
+                agents={agents}
+                selectedAgent={selectedAgent}
+                onSelect={setSelectedAgent}
+                onCreateNew={() => {
+                  window.location.href = "/meowone/agents/create";
+                }}
+              />
+              {currentAgentInfo && (
+                <div className="hidden items-center gap-2 text-xs text-[#6b7280] sm:flex">
+                  {currentAgentInfo.mcp_servers && currentAgentInfo.mcp_servers.length > 0 && (
+                    <span className="rounded-full bg-purple-100 px-2 py-0.5 text-purple-600">
+                      {currentAgentInfo.mcp_servers.length} MCP
+                    </span>
+                  )}
+                  {currentAgentInfo.agent_skills && currentAgentInfo.agent_skills.length > 0 && (
+                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-600">
+                      {currentAgentInfo.agent_skills.length} 技能
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-[12px] text-[#6b7280]">
+              <span className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5">
+                模型: {defaultModelName}
+              </span>
+              <span className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5">
+                调度: {schedulerMode}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <header className="relative border-b border-[#e5e7eb] px-4 py-2 text-center">
           <button
             type="button"
@@ -957,19 +1142,28 @@ export default function MeowChatPage() {
           <h1 className="text-[15px] font-semibold text-[#1d2129]">{currentTitle}</h1>
           <p className="text-[12px] text-[#6b7280]">内容由 AI 生成 · MeowOne</p>
         </header>
-        <div className="border-b border-[#eef0f3] bg-[#fafbfc] px-4 py-2">
-          <div className="mx-auto flex w-full max-w-[760px] flex-wrap items-center gap-2 text-[12px] text-[#4e5969]">
-            <span className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5">模型: {defaultModelName}</span>
-            <span className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5">调度: {schedulerMode}</span>
-            <span className="rounded-full border border-[#dbe2ea] bg-white px-2 py-0.5">渠道: {channelId}</span>
-          </div>
-        </div>
         <div id="meow-chat-scroll" ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-8 pt-8 sm:px-6 sm:pt-12">
           <div className="mx-auto w-full max-w-[760px] space-y-4">
             {!hasConversation ? (
               <div className="px-2 pb-10 pt-8 text-center sm:pt-14">
-                <h2 className="text-[40px] font-semibold tracking-tight text-[#1d2129]">有什么我能帮你的吗？</h2>
-                <p className="mt-3 text-[14px] text-[#86909c]">支持 Markdown、代码高亮、Mermaid 和 A2UI。</p>
+                <div className="mb-6 flex size-16 mx-auto items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                  <RobotIcon />
+                </div>
+                <h2 className="text-[32px] font-semibold tracking-tight text-[#1d2129]">
+                  {selectedAgent ? `与 ${selectedAgent} 对话` : "有什么我能帮你的吗？"}
+                </h2>
+                <p className="mt-3 text-[14px] text-[#86909c]">
+                  {selectedAgent ? "开始对话，测试你的智能体" : "请先选择一个智能体或创建一个新的"}
+                </p>
+                {!selectedAgent && agents.length === 0 && (
+                  <Link
+                    href="/meowone/agents/create"
+                    className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 font-medium text-white transition-all hover:from-blue-600 hover:to-purple-700"
+                  >
+                    <PlusIcon />
+                    创建第一个智能体
+                  </Link>
+                )}
                 <div className="mt-8 flex flex-wrap justify-center gap-2">
                   {suggestionPrompts.map((item) => (
                     <button
@@ -1103,8 +1297,9 @@ export default function MeowChatPage() {
                     setPrompt(e.target.value);
                     adjustTextareaHeight();
                   }}
-                  placeholder="发消息..."
+                  placeholder={selectedAgent ? "输入消息..." : "请先选择一个智能体"}
                   rows={1}
+                  disabled={!selectedAgent && agents.length === 0}
                   className="max-h-40 min-h-[48px] w-full resize-none border-0 bg-transparent py-2.5 text-[15px] font-normal leading-7 text-[#1d2129] antialiased outline-none placeholder:text-[#9aa0a6] placeholder:text-[14px]"
                   onKeyDown={async (e) => {
                     if (composingRef.current || (e.nativeEvent as KeyboardEvent).isComposing) return;
@@ -1127,7 +1322,7 @@ export default function MeowChatPage() {
                 ) : (
                   <button
                     type="button"
-                    className="mb-0.5 flex size-10 items-center justify-center rounded-full bg-[#2f7dff] text-white"
+                    className="mb-0.5 flex size-10 items-center justify-center rounded-full bg-[#2f7dff] text-white disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={!prompt.trim() || loading}
                     onClick={send}
                     aria-label="发送"

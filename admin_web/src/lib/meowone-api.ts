@@ -11,6 +11,8 @@ export type Session = {
   user_id: string;
   title: string | null;
   summary: string | null;
+  agent_name?: string | null;
+  agent_type?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -49,6 +51,8 @@ export type ChatStreamInput = {
   max_tool_phases?: number;
   timeout_seconds?: number;
   scheduler_mode?: string;
+  agent_name?: string;
+  agent_type?: string;
 };
 
 export type A2UIActionInput = {
@@ -202,6 +206,8 @@ export const meowoneApi = {
         max_tool_phases: input.max_tool_phases,
         timeout_seconds: input.timeout_seconds,
         scheduler_mode: input.scheduler_mode,
+        agent_name: input.agent_name,
+        agent_type: input.agent_type,
       },
       onEvent,
       options,

@@ -21,6 +21,8 @@ class ChatRequest(BaseModel):
     timeout_seconds: Optional[int] = None
     scheduler_mode: Optional[str] = None
     task_tag: Optional[str] = None
+    agent_name: Optional[str] = None
+    agent_type: Optional[str] = None
 
 
 class CardActionRequest(BaseModel):

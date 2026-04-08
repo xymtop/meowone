@@ -21,16 +21,16 @@ export type NavSection = {
 
 export const NAV_DATA: NavSection[] = [
   {
-    label: "Workbench",
+    label: "工作区",
     items: [
       {
-        title: "系统总览",
+        title: "快速开始",
         url: "/meowone",
         icon: Icons.HomeIcon,
         items: [],
       },
       {
-        title: "对话控制台",
+        title: "对话",
         url: "/meowone/chat",
         icon: Icons.Authentication,
         items: [],
@@ -38,30 +38,24 @@ export const NAV_DATA: NavSection[] = [
     ],
   },
   {
-    label: "Agents",
+    label: "智能体",
     items: [
       {
-        title: "智能体列表",
+        title: "我的智能体",
         url: "/meowone/agents",
         icon: Icons.User,
         items: [],
       },
       {
-        title: "内部智能体（兼容）",
-        url: "/meowone/internal-agents",
-        icon: Icons.HomeIcon,
-        items: [],
-      },
-      {
-        title: "任务调度",
-        url: "/meowone/scheduled-tasks",
-        icon: Icons.Calendar,
+        title: "创建智能体",
+        url: "/meowone/agents/create",
+        icon: Icons.PieChart,
         items: [],
       },
     ],
   },
   {
-    label: "Capabilities",
+    label: "能力中心",
     items: [
       {
         title: "模型管理",
@@ -90,16 +84,16 @@ export const NAV_DATA: NavSection[] = [
     ],
   },
   {
-    label: "Observability",
+    label: "记录",
     items: [
       {
-        title: "会话记录",
+        title: "会话历史",
         url: "/meowone/sessions",
         icon: Icons.Table,
         items: [],
       },
       {
-        title: "消息记录（兼容）",
+        title: "消息记录",
         url: "/meowone/messages",
         icon: Icons.User,
         items: [],
@@ -113,18 +107,18 @@ export const NAV_DATA: NavSection[] = [
     ],
   },
   {
-    label: "开发工具",
+    label: "高级",
     items: [
       {
-        title: "Monaco 编辑器测试",
-        url: "/meowone/monaco-test",
-        icon: Icons.Alphabet,
+        title: "任务调度",
+        url: "/meowone/scheduled-tasks",
+        icon: Icons.Calendar,
         items: [],
       },
       {
-        title: "Agent DAG 演示",
-        url: "/meowone/agent-dag-test",
-        icon: Icons.PieChart,
+        title: "内部智能体",
+        url: "/meowone/internal-agents",
+        icon: Icons.HomeIcon,
         items: [],
       },
     ],

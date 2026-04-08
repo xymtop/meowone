@@ -23,6 +23,7 @@ from app.scheduler.executor import execute_scheduled_turn
 from app.scheduler.planner import build_execution_plan
 from app.scheduler.registry import scheduler_registry
 from app.services import message_service
+from app.db.database import get_db
 
 
 class ConversationTurnService:
@@ -31,6 +32,21 @@ class ConversationTurnService:
     def __init__(self, capabilities: CapabilityRegistry) -> None:
         self.capabilities = capabilities
         self.capability_runtime = CapabilityRuntime(capabilities)
+
+    async def _load_agent_config(self, agent_name: str, agent_type: str) -> Dict[str, Any] | None:
+        """从数据库加载 agent 配置"""
+        try:
+            async with get_db() as db:
+                cursor = await db.execute(
+                    "SELECT * FROM agents WHERE name = ? AND agent_type = ?",
+                    (agent_name, agent_type),
+                )
+                row = await cursor.fetchone()
+                if row:
+                    return dict(row)
+                return None
+        except Exception:
+            return None
 
     async def _build_history(self, session_id: str, exclude_content: str) -> List[Dict[str, Any]]:
         history_rows = await message_service.get_context_messages(session_id, limit=20)
@@ -53,7 +69,21 @@ class ConversationTurnService:
         task_tag: str | None = None,
         capability_filter: CapabilityFilter | None = None,
         limits: LoopLimits | None = None,
+        agent_name: str | None = None,
+        agent_type: str | None = None,
     ) -> AsyncIterator[Dict[str, str]]:
+        # 如果指定了 agent_name，从数据库加载 agent 配置
+        extra_system = ""
+        if agent_name:
+            agent_cfg = await self._load_agent_config(agent_name, agent_type or "internal")
+            if agent_cfg:
+                # 合并 agent 的 system_prompt 和 prompt_key
+                if agent_cfg.get("system_prompt"):
+                    extra_system = agent_cfg["system_prompt"]
+                if agent_cfg.get("prompt_key"):
+                    # TODO: 从 prompts 表加载 prompt_key 对应的内容并追加
+                    pass
+        
         history = await self._build_history(session_id, exclude_content=exclude_for_history)
         effective_filter = capability_filter
         if effective_filter is None:
@@ -96,7 +126,14 @@ class ConversationTurnService:
             filter=effective_filter,
             channel_id=channel_id,
         )
-        extra_system = build_extra_system_prompt()
+        # 如果没有通过 agent 配置加载 system_prompt，则使用默认的
+        if not extra_system:
+            extra_system = build_extra_system_prompt()
+        else:
+            # Agent 的 system_prompt 已有，追加默认的
+            default_system = build_extra_system_prompt()
+            if default_system:
+                extra_system = extra_system + "\n\n" + default_system
         if schedule.system_hint:
             extra_system = (extra_system + "\n\n" + schedule.system_hint).strip()
         yield {

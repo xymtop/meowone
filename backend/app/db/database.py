@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id TEXT NOT NULL,
     title TEXT,
     summary TEXT,
+    agent_name TEXT DEFAULT '',
+    agent_type TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );

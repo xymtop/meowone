@@ -4,12 +4,12 @@ from typing import Optional, List, Dict, Any
 from app.db.database import get_db
 
 
-async def create_session(user_id: str, title: Optional[str] = None) -> Dict[str, Any]:
+async def create_session(user_id: str, title: Optional[str] = None, agent_name: Optional[str] = None, agent_type: Optional[str] = None) -> Dict[str, Any]:
     session_id = str(uuid.uuid4())
     async with get_db() as db:
         await db.execute(
-            "INSERT INTO sessions (id, user_id, title) VALUES (?, ?, ?)",
-            (session_id, user_id, title),
+            "INSERT INTO sessions (id, user_id, title, agent_name, agent_type) VALUES (?, ?, ?, ?, ?)",
+            (session_id, user_id, title, agent_name, agent_type),
         )
         await db.commit()
         cursor = await db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
@@ -36,12 +36,25 @@ async def get_session(session_id: str) -> Dict[str, Any]:
         return dict(row)
 
 
-async def update_session(session_id: str, title: Optional[str] = None) -> Dict[str, Any]:
+async def update_session(session_id: str, title: Optional[str] = None, agent_name: Optional[str] = None, agent_type: Optional[str] = None) -> Dict[str, Any]:
     async with get_db() as db:
+        updates = []
+        params = []
         if title is not None:
+            updates.append("title = ?")
+            params.append(title)
+        if agent_name is not None:
+            updates.append("agent_name = ?")
+            params.append(agent_name)
+        if agent_type is not None:
+            updates.append("agent_type = ?")
+            params.append(agent_type)
+        if updates:
+            updates.append("updated_at = datetime('now')")
+            params.append(session_id)
             await db.execute(
-                "UPDATE sessions SET title = ?, updated_at = datetime('now') WHERE id = ?",
-                (title, session_id),
+                f"UPDATE sessions SET {', '.join(updates)} WHERE id = ?",
+                tuple(params),
             )
         await db.commit()
         cursor = await db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))

@@ -18,6 +18,8 @@ async def stream_web_sse_turn(
     scheduler_mode: str | None = None,
     task_tag: str | None = None,
     limits: LoopLimits | None = None,
+    agent_name: str | None = None,
+    agent_type: str | None = None,
 ) -> AsyncIterator[Dict[str, str]]:
     async for item in service.stream_turn(
         session_id=session_id,
@@ -27,6 +29,8 @@ async def stream_web_sse_turn(
         scheduler_mode=scheduler_mode,
         task_tag=task_tag,
         limits=limits,
+        agent_name=agent_name,
+        agent_type=agent_type,
     ):
         log_stream_service.append_log(
             session_id=session_id,
