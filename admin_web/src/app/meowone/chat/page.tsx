@@ -964,7 +964,6 @@ type SelectedTarget =
 function ChatContent() {
   const searchParams = useSearchParams();
   const paramInstance = searchParams.get("instance");
-  const paramAgent = searchParams.get("agent");
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState("");
@@ -987,7 +986,7 @@ function ChatContent() {
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<SelectedTarget | null>(
-    paramAgent ? { mode: "agent", id: paramAgent, name: "" } : (paramInstance ? { mode: "instance", id: paramInstance } : null)
+    paramInstance ? { mode: "instance", id: paramInstance } : null
   );
 
   const loadInstances = useCallback(async () => {
@@ -1018,18 +1017,10 @@ function ChatContent() {
         description: a.description ? String(a.description) : undefined,
       })) as AgentInfo[];
       setAgents(agentList);
-
-      // URL ?agent= 支持
-      if (paramAgent) {
-        const found = agentList.find((a) => a.id === paramAgent || a.name === paramAgent);
-        if (found) {
-          setSelectedTarget({ mode: "agent", id: found.id, name: found.name });
-        }
-      }
     } catch (e) {
       console.error("加载智能体失败:", e);
     }
-  }, [paramAgent]);
+  }, []);
 
   const loadSessions = async () => {
     const list = await meowoneApi.listSessions();

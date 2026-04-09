@@ -89,11 +89,8 @@ class ConversationTurnService:
         agent_type: str | None = None,
         agent_id: str | None = None,
         model_name: str | None = None,
-        instance_id: str | None = None,
-        instance_config: Dict[str, Any] | None = None,
     ) -> AsyncIterator[Dict[str, str]]:
         from app.services import agent_service
-        from app.services.instance_orchestration_service import format_execution_plan_for_display
 
         extra_system = ""
         agent_capability_filter: Optional[CapabilityFilter] = None
@@ -104,171 +101,74 @@ class ConversationTurnService:
         deny_tools: List[str] = []
 
         agent_cfg: Dict[str, Any] | None = None
-        
-        # 实例对话模式
-        if instance_id and instance_config:
-            execution_plan = instance_config.get("execution_plan", {})
-            
-            # 发送实例配置信息
-            plan_desc = format_execution_plan_for_display(execution_plan)
-            yield {
-                "event": "thinking",
-                "data": json.dumps({
-                    "step": -2,
-                    "description": f"实例对话模式 | {instance_config.get('instance_name', instance_id)}"
-                }),
-            }
-            yield {
-                "event": "thinking",
-                "data": json.dumps({
-                    "step": -1,
-                    "description": f"执行计划: {plan_desc}",
-                    "executionPlan": execution_plan
-                }),
-            }
-            
-            # 从实例配置中获取调度配置
-            strategy_info = instance_config.get("strategy_info", {})
-            loop_config = instance_config.get("loop_config", {})
-            
-            # 使用实例配置的调度模式
-            if not scheduler_mode and strategy_info:
-                scheduler_mode = strategy_info.get("name")
-            
-            # 从镜像配置中读取 loop_mode
-            if loop_config:
-                raw_loop_mode = str(loop_config.get("name", "")).strip()
-                if raw_loop_mode in SUPPORTED_LOOP_MODES:
-                    agent_loop_mode = raw_loop_mode
-            
-            # 构建实例的系统提示词
-            instance_system_parts = []
-            instance_system_parts.append(f"# 实例配置\n实例名称: {instance_config.get('instance_name', 'N/A')}")
-            instance_system_parts.append(f"镜像名称: {instance_config.get('image_name', 'N/A')}")
-            instance_system_parts.append(f"执行拓扑: {execution_plan.get('topology', 'direct')}")
-            instance_system_parts.append(f"执行计划: {plan_desc}")
-            
-            # 添加智能体列表到系统提示词
-            agents = instance_config.get("agents", [])
-            if agents:
-                agent_list = "\n".join([f"- {a.get('name', 'N/A')}: {a.get('description', '无描述')}" for a in agents])
-                instance_system_parts.append(f"\n## 可用智能体\n{agent_list}")
-            
-            extra_system = "\n".join(instance_system_parts)
-            
-            # 加载第一个智能体作为基础配置（用于获取 MCP、skills 等）
-            if agents:
-                primary_agent = agents[0]
-                primary_agent_id = primary_agent.get("id")
-                if primary_agent_id:
-                    agent_cfg = await agent_service.get_agent_by_id(str(primary_agent_id))
-                    if agent_cfg:
-                        # 追加智能体的系统提示词
-                        agent_system = str(agent_cfg.get("system_prompt") or "")
-                        if agent_system:
-                            extra_system = (extra_system + "\n\n## 主智能体配置\n" + agent_system).strip()
-                        
-                        # 获取智能体的 MCP 和 skills
-                        mcp_servers = self._parse_json_list(agent_cfg.get("mcp_servers"))
-                        agent_skills = self._parse_json_list(agent_cfg.get("agent_skills"))
-                        
-                        if mcp_servers:
-                            agent_base_allowed.extend(["list_mcp_tools", "call_mcp_tool"])
-                            yield {
-                                "event": "thinking",
-                                "data": json.dumps({
-                                    "step": 0,
-                                    "description": f"主智能体 {agent_cfg.get('name')} 配置了 {len(mcp_servers)} 个 MCP 服务器"
-                                }),
-                            }
-                        if agent_skills:
-                            agent_base_allowed.append("load_agent_skill")
-                            yield {
-                                "event": "thinking",
-                                "data": json.dumps({
-                                    "step": 0,
-                                    "description": f"主智能体 {agent_cfg.get('name')} 配置了 {len(agent_skills)} 个技能"
-                                }),
-                            }
-                        
-                        # 构建工具权限
-                        if agent_base_allowed:
-                            agent_capability_filter = CapabilityFilter(
-                                allow_names=agent_base_allowed,
-                                deny_names=None
-                            )
-                            
-                        agent_label = str(agent_cfg.get("name") or "instance")
-        # 智能体对话模式（仅当不在实例模式时执行）
-        elif not instance_id:
-            if agent_id and str(agent_id).strip():
-                agent_cfg = await agent_service.get_agent_by_id(str(agent_id).strip())
-            if agent_cfg is None and agent_name and str(agent_name).strip():
-                agent_cfg = await self._load_agent_config(str(agent_name).strip(), (agent_type or "internal").strip())
+        if agent_id and str(agent_id).strip():
+            agent_cfg = await agent_service.get_agent_by_id(str(agent_id).strip())
+        if agent_cfg is None and agent_name and str(agent_name).strip():
+            agent_cfg = await self._load_agent_config(str(agent_name).strip(), (agent_type or "internal").strip())
 
-            agent_label = str(agent_cfg.get("name") or agent_name or "agent") if agent_cfg else ""
+        agent_label = str(agent_cfg.get("name") or agent_name or "agent") if agent_cfg else ""
 
-            if agent_cfg:
-                if agent_cfg.get("system_prompt"):
-                    extra_system = str(agent_cfg.get("system_prompt") or "")
+        if agent_cfg:
+            if agent_cfg.get("system_prompt"):
+                extra_system = str(agent_cfg.get("system_prompt") or "")
 
-                agent_prompt_key = agent_cfg.get("prompt_key") or ""
-                if agent_prompt_key:
-                    prompt_content = await self._load_prompt_content(str(agent_prompt_key))
-                    if prompt_content:
-                        extra_system = (extra_system + "\n\n" + prompt_content).strip()
+            agent_prompt_key = agent_cfg.get("prompt_key") or ""
+            if agent_prompt_key:
+                prompt_content = await self._load_prompt_content(str(agent_prompt_key))
+                if prompt_content:
+                    extra_system = (extra_system + "\n\n" + prompt_content).strip()
 
-                mcp_servers = self._parse_json_list(agent_cfg.get("mcp_servers"))
-                agent_skills = self._parse_json_list(agent_cfg.get("agent_skills"))
-                allow_tools = self._parse_json_list(agent_cfg.get("allow_tools"))
-                deny_tools = self._parse_json_list(agent_cfg.get("deny_tools"))
+            mcp_servers = self._parse_json_list(agent_cfg.get("mcp_servers"))
+            agent_skills = self._parse_json_list(agent_cfg.get("agent_skills"))
+            allow_tools = self._parse_json_list(agent_cfg.get("allow_tools"))
+            deny_tools = self._parse_json_list(agent_cfg.get("deny_tools"))
 
-                meta_model = str(agent_cfg.get("model_name") or "").strip()
-                if meta_model:
-                    llm_model = meta_model
+            meta_model = str(agent_cfg.get("model_name") or "").strip()
+            if meta_model:
+                llm_model = meta_model
 
-                # 从 metadata_json 中读取 loop_mode
-                metadata = agent_cfg.get("metadata_json") or {}
-                if isinstance(metadata, str) and metadata:
-                    metadata = json.loads(metadata)
-                raw_loop_mode = str(metadata.get("loop_mode") or "").strip()
-                if raw_loop_mode and raw_loop_mode in SUPPORTED_LOOP_MODES:
-                    agent_loop_mode = raw_loop_mode
+            # 从 metadata_json 中读取 loop_mode
+            metadata = agent_cfg.get("metadata_json") or {}
+            if isinstance(metadata, str) and metadata:
+                metadata = json.loads(metadata)
+            raw_loop_mode = str(metadata.get("loop_mode") or "").strip()
+            if raw_loop_mode and raw_loop_mode in SUPPORTED_LOOP_MODES:
+                agent_loop_mode = raw_loop_mode
 
-                # 构建智能体的基础工具列表（MCP + skills）
-                if mcp_servers:
-                    agent_base_allowed.extend(["list_mcp_tools", "call_mcp_tool"])
-                if agent_skills:
-                    agent_base_allowed.append("load_agent_skill")
+            # 构建智能体的基础工具列表（MCP + skills）
+            if mcp_servers:
+                agent_base_allowed.extend(["list_mcp_tools", "call_mcp_tool"])
+            if agent_skills:
+                agent_base_allowed.append("load_agent_skill")
 
-                # 构建智能体的工具权限过滤
-                # 优先级：allow_tools > base_allowed（MCP + skills） > None（允许所有）
-                if allow_tools:
-                    # 显式配置的 allow_tools 优先
-                    final_allow = list(dict.fromkeys(agent_base_allowed + allow_tools))
-                    agent_capability_filter = CapabilityFilter(allow_names=final_allow, deny_names=deny_tools if deny_tools else None)
-                elif agent_base_allowed:
-                    # 只有 MCP/skills 配置，使用 base_allowed
-                    agent_capability_filter = CapabilityFilter(allow_names=agent_base_allowed, deny_names=deny_tools if deny_tools else None)
-                elif deny_tools:
-                    # 只有 deny_tools，没有 allow
-                    agent_capability_filter = CapabilityFilter(allow_names=None, deny_names=deny_tools)
-                # else: agent_capability_filter 保持 None，表示没有任何限制
+            # 构建智能体的工具权限过滤
+            # 优先级：allow_tools > base_allowed（MCP + skills） > None（允许所有）
+            if allow_tools:
+                # 显式配置的 allow_tools 优先
+                final_allow = list(dict.fromkeys(agent_base_allowed + allow_tools))
+                agent_capability_filter = CapabilityFilter(allow_names=final_allow, deny_names=deny_tools if deny_tools else None)
+            elif agent_base_allowed:
+                # 只有 MCP/skills 配置，使用 base_allowed
+                agent_capability_filter = CapabilityFilter(allow_names=agent_base_allowed, deny_names=deny_tools if deny_tools else None)
+            elif deny_tools:
+                # 只有 deny_tools，没有 allow
+                agent_capability_filter = CapabilityFilter(allow_names=None, deny_names=deny_tools)
+            # else: agent_capability_filter 保持 None，表示没有任何限制
 
-                if mcp_servers:
-                    yield {
-                        "event": "thinking",
-                        "data": json.dumps(
-                            {"step": -1, "description": f"Agent {agent_label} configured with {len(mcp_servers)} MCP servers"}
-                        ),
-                    }
-                if agent_skills:
-                    yield {
-                        "event": "thinking",
-                        "data": json.dumps(
-                            {"step": -1, "description": f"Agent {agent_label} configured with {len(agent_skills)} skills"}
-                        ),
-                    }
+            if mcp_servers:
+                yield {
+                    "event": "thinking",
+                    "data": json.dumps(
+                        {"step": -1, "description": f"Agent {agent_label} configured with {len(mcp_servers)} MCP servers"}
+                    ),
+                }
+            if agent_skills:
+                yield {
+                    "event": "thinking",
+                    "data": json.dumps(
+                        {"step": -1, "description": f"Agent {agent_label} configured with {len(agent_skills)} skills"}
+                    ),
+                }
 
         history = await self._build_history(session_id, exclude_content=exclude_for_history)
 

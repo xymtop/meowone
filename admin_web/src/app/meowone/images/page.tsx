@@ -36,38 +36,6 @@ function RefreshIcon() {
   );
 }
 
-function ChevronRightIcon() {
-  return (
-    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-    </svg>
-  );
-}
-
-function Modal({ open, onClose, title, children }: {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-dark-2">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
 function CheckIcon() {
   return (
     <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -100,10 +68,6 @@ export default function ImagesPage() {
   const [data, setData] = useState<{ count: number; images: Record<string, unknown>[] } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingImage, setEditingImage] = useState<Record<string, unknown> | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", description: "" });
-  const [saving, setSaving] = useState(false);
 
   const load = async () => {
     try {
@@ -139,35 +103,6 @@ export default function ImagesPage() {
       await load();
     } catch (e) {
       setError((e as Error).message);
-    }
-  };
-
-  const openEditModal = (img: Record<string, unknown>) => {
-    setEditingImage(img);
-    setEditForm({
-      name: (img as {name?:string}).name || "",
-      description: (img as {description?:string}).description || "",
-    });
-    setShowEditModal(true);
-  };
-
-  const handleUpdate = async () => {
-    if (!editingImage) return;
-    const imgId = (editingImage as {id?:string}).id || "";
-    setSaving(true);
-    try {
-      await meowoneApi.updateAgentImage(imgId, {
-        name: editForm.name.trim(),
-        description: editForm.description.trim(),
-      });
-      setShowEditModal(false);
-      setEditingImage(null);
-      setEditForm({ name: "", description: "" });
-      await load();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -287,13 +222,13 @@ export default function ImagesPage() {
                     >
                       创建实例
                     </Link>
-                    <button
-                      onClick={() => openEditModal(img)}
-                      className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100"
+                    <Link
+                      href={`/meowone/images/${imgId}/edit`}
+                      className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600 hover:bg-blue-100"
                     >
                       <EditIcon />
                       编辑
-                    </button>
+                    </Link>
                     <button
                       onClick={() => handleToggle(img)}
                       className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${
@@ -344,26 +279,6 @@ export default function ImagesPage() {
           <li>• 创建镜像后，可以基于该镜像创建多个实例进行对话</li>
         </ul>
       </div>
-
-      {/* 编辑镜像弹窗 */}
-      <Modal open={showEditModal} onClose={() => { setShowEditModal(false); setEditingImage(null); setEditForm({ name: "", description: "" }); }} title="编辑镜像">
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">名称</label>
-            <input value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} placeholder="镜像名称" className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm dark:border-dark-3 dark:bg-dark" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">描述</label>
-            <textarea value={editForm.description} onChange={(e) => setEditForm({...editForm, description: e.target.value})} placeholder="描述这个镜像的用途" rows={3} className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm dark:border-dark-3 dark:bg-dark" />
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => { setShowEditModal(false); setEditingImage(null); setEditForm({ name: "", description: "" }); }} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600">取消</button>
-            <button onClick={() => void handleUpdate()} disabled={saving} className="rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-              {saving ? "保存中..." : "保存"}
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

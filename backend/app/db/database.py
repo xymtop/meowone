@@ -352,30 +352,8 @@ CREATE TABLE IF NOT EXISTS environments (
 );
 
 -- ============================================================
--- 调度配置文件表（可扩展的 JSON 配置）
--- 每个配置定义一个调度拓扑，如主从结构、层级结构等
--- ============================================================
-CREATE TABLE IF NOT EXISTS strategy_configs (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    description TEXT DEFAULT '',
-    -- 关联的策略ID
-    strategy_id TEXT REFERENCES strategies(id),
-    -- 调度配置文件内容（任意JSON格式，方便扩展）
-    -- 例如主从结构：{"topology": "master_slave", "master": "agent_id", "slaves": ["agent_id1", "agent_id2"]}
-    config_json TEXT DEFAULT '{}',
-    -- 配置模板类型（用于前端编辑器渲染）
-    template_type TEXT DEFAULT 'custom',
-    -- 是否系统内置
-    is_system INTEGER DEFAULT 0,
-    enabled INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
-);
-
--- ============================================================
 -- MeowOne v3.1 智能体镜像表
--- 镜像 = 选中的智能体列表 + 调度策略 + 调度配置文件 + 执行环境
+-- 镜像 = 选中的智能体列表 + 调度策略 + 执行环境
 -- ============================================================
 CREATE TABLE IF NOT EXISTS agent_images (
     id TEXT PRIMARY KEY,
@@ -386,9 +364,6 @@ CREATE TABLE IF NOT EXISTS agent_images (
     -- 调度配置
     loop_id TEXT REFERENCES loops(id),
     strategy_id TEXT REFERENCES strategies(id),
-    -- 调度配置文件ID（可选，定义拓扑结构）
-    strategy_config_id TEXT REFERENCES strategy_configs(id),
-    -- 调度配置内容（如果使用 strategy_config_id 则忽略此字段）
     strategy_config_json TEXT DEFAULT '{}',
     environment_id TEXT REFERENCES environments(id),
     -- 元数据
@@ -400,18 +375,16 @@ CREATE TABLE IF NOT EXISTS agent_images (
 
 -- ============================================================
 -- MeowOne v3.1 智能体实例表
--- 实例 = 镜像 + 执行环境 + 调度时大模型
+-- 实例 = 镜像的运行实体，在对话中实际使用
 -- ============================================================
 CREATE TABLE IF NOT EXISTS agent_instances (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     description TEXT DEFAULT '',
     image_id TEXT NOT NULL REFERENCES agent_images(id),  -- 关联的镜像
-    environment_id TEXT REFERENCES environments(id),   -- 执行环境（可覆盖镜像配置）
-    -- 调度时使用的大模型（可覆盖镜像配置）
-    model_name TEXT DEFAULT '',
     -- 运行时配置（可覆盖镜像配置）
-    runtime_config_json TEXT DEFAULT '{}',
+    model_name TEXT DEFAULT '',               -- 使用的模型
+    runtime_config_json TEXT DEFAULT '{}',   -- 运行时配置
     status TEXT DEFAULT 'stopped',           -- stopped, running
     metadata_json TEXT DEFAULT '{}',
     enabled INTEGER DEFAULT 1,
@@ -422,7 +395,6 @@ CREATE TABLE IF NOT EXISTS agent_instances (
 CREATE INDEX IF NOT EXISTS idx_agent_images_name ON agent_images (name);
 CREATE INDEX IF NOT EXISTS idx_agent_instances_name ON agent_instances (name);
 CREATE INDEX IF NOT EXISTS idx_agent_instances_image ON agent_instances (image_id);
-CREATE INDEX IF NOT EXISTS idx_strategy_configs_name ON strategy_configs (name);
 """
 
 _INSERT_DEFAULT_USER = "INSERT OR IGNORE INTO users (id, username) VALUES ('default', 'user');"
@@ -439,7 +411,6 @@ async def init_db() -> None:
         await _migrate_agent_images_table(db)
         await _migrate_agent_instances_table(db)
         await _migrate_environments_table(db)
-        await _migrate_strategy_configs_table(db)
         await _seed_v3_system_records(db)
         await db.execute(_INSERT_DEFAULT_USER)
         await db.commit()
@@ -518,8 +489,6 @@ async def _migrate_agent_images_table(db: aiosqlite.Connection) -> None:
         await db.execute("ALTER TABLE agent_images ADD COLUMN loop_id TEXT")
     if "strategy_id" not in cols:
         await db.execute("ALTER TABLE agent_images ADD COLUMN strategy_id TEXT")
-    if "strategy_config_id" not in cols:
-        await db.execute("ALTER TABLE agent_images ADD COLUMN strategy_config_id TEXT")
     if "strategy_config_json" not in cols:
         await db.execute("ALTER TABLE agent_images ADD COLUMN strategy_config_json TEXT DEFAULT '{}'")
     if "environment_id" not in cols:
@@ -539,39 +508,12 @@ async def _migrate_environments_table(db: aiosqlite.Connection) -> None:
         await db.execute("ALTER TABLE environments ADD COLUMN api_key TEXT DEFAULT ''")
 
 
-async def _migrate_strategy_configs_table(db: aiosqlite.Connection) -> None:
-    """strategy_configs 表的迁移：检查表是否存在并添加缺失的列"""
-    cur = await db.execute("PRAGMA table_info(strategy_configs)")
-    rows = await cur.fetchall()
-    cols = {str(r[1]) for r in rows} if rows else set()
-    
-    # 表不存在则创建
-    if "name" not in cols:
-        # 表不存在，需要创建整个表
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS strategy_configs (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                description TEXT DEFAULT '',
-                strategy_id TEXT,
-                config_json TEXT DEFAULT '{}',
-                template_type TEXT DEFAULT 'custom',
-                is_system INTEGER DEFAULT 0,
-                enabled INTEGER DEFAULT 1,
-                created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now'))
-            )
-        """)
-
-
 async def _migrate_agent_instances_table(db: aiosqlite.Connection) -> None:
     """agent_instances 表的迁移：添加缺失的列"""
     cur = await db.execute("PRAGMA table_info(agent_instances)")
     rows = await cur.fetchall()
     cols = {str(r[1]) for r in rows}
     
-    if "environment_id" not in cols:
-        await db.execute("ALTER TABLE agent_instances ADD COLUMN environment_id TEXT")
     if "model_name" not in cols:
         await db.execute("ALTER TABLE agent_instances ADD COLUMN model_name TEXT DEFAULT ''")
     if "runtime_config_json" not in cols:

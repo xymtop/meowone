@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Dict
+from typing import AsyncIterator, Dict
 
 from app.loop.context import UserContent
 from app.gateway.turn_service import ConversationTurnService
@@ -22,8 +22,6 @@ async def stream_web_sse_turn(
     agent_type: str | None = None,
     agent_id: str | None = None,
     model_name: str | None = None,
-    instance_id: str | None = None,
-    instance_config: Dict[str, Any] | None = None,
 ) -> AsyncIterator[Dict[str, str]]:
     async for item in service.stream_turn(
         session_id=session_id,
@@ -37,8 +35,6 @@ async def stream_web_sse_turn(
         agent_type=agent_type,
         agent_id=agent_id,
         model_name=model_name,
-        instance_id=instance_id,
-        instance_config=instance_config,
     ):
         log_stream_service.append_log(
             session_id=session_id,
@@ -46,3 +42,4 @@ async def stream_web_sse_turn(
             data=item.get("data", ""),
         )
         yield item
+

@@ -20,10 +20,6 @@ class ChatRequest(BaseModel):
     聊天请求
 
     用于向会话发送用户消息，支持文本和多模态输入。
-
-    支持两种对话模式：
-    1. 智能体对话：指定 agent_id 或 agent_name
-    2. 实例对话：指定 instance_id（系统会根据镜像配置加载智能体组合）
     """
 
     content: str = Field(default="", description="消息内容")
@@ -38,7 +34,6 @@ class ChatRequest(BaseModel):
     agent_name: Optional[str] = Field(default=None, description="指定智能体名称")
     agent_type: Optional[str] = Field(default=None, description="智能体类型（internal/external）")
     agent_id: Optional[str] = Field(default=None, description="指定智能体ID（优先于name）")
-    instance_id: Optional[str] = Field(default=None, description="指定实例ID（会加载镜像配置进行多智能体调度）")
     model_name: Optional[str] = Field(default=None, description="指定模型名称")
 
 

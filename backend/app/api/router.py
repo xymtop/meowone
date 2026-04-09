@@ -6,7 +6,6 @@ from app.api.agent_executions import router as agent_executions_router
 from app.api.agents import router as agents_router
 from app.api.v3 import router as v3_router
 from app.api.v3_images import router as v3_images_router
-from app.api.v3_strategy_configs import router as v3_strategy_configs_router
 from app.api.chat import router as chat_router
 from app.api.capability_management import router as capability_management_router
 from app.api.gateway import router as gateway_router
@@ -41,7 +40,6 @@ api_router.include_router(workflows_router)
 api_router.include_router(tasks_router)
 api_router.include_router(v3_router)
 api_router.include_router(v3_images_router)
-api_router.include_router(v3_strategy_configs_router)
 
 
 def include_api_routers(app: FastAPI) -> None:

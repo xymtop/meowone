@@ -283,13 +283,6 @@ function AgentsContent() {
 
                   {/* 操作按钮 */}
                   <div className="mt-4 flex items-center gap-2">
-                    <Link
-                      href={`/meowone/chat?agent=${encodeURIComponent(nm)}`}
-                      className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-100"
-                    >
-                      <ChatIcon />
-                      聊天
-                    </Link>
                     {typ === "external" ? (
                       <Link
                         href={`/meowone/agents/create/external?edit=${encodeURIComponent(nm)}`}

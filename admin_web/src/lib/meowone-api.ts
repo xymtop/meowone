@@ -55,8 +55,6 @@ export type ChatStreamInput = {
   agent_type?: string;
   /** 数据库主键，优先于 agent_name */
   agent_id?: string;
-  /** 实例ID（用于多智能体对话） */
-  instance_id?: string;
   /** 仅默认智能体：用户选择的模型名 */
   model_name?: string;
 };
@@ -316,7 +314,6 @@ export const meowoneApi = {
         agent_name: input.agent_name,
         agent_type: input.agent_type,
         agent_id: input.agent_id,
-        instance_id: input.instance_id,
         model_name: input.model_name,
       },
       onEvent,
@@ -876,7 +873,6 @@ export const meowoneApi = {
     agent_ids?: string[];
     loop_id?: string;
     strategy_id?: string;
-    strategy_config_id?: string;
     strategy_config?: Record<string, unknown>;
     environment_id?: string;
   }) =>
@@ -892,7 +888,6 @@ export const meowoneApi = {
     agent_ids?: string[];
     loop_id?: string;
     strategy_id?: string;
-    strategy_config_id?: string;
     strategy_config?: Record<string, unknown>;
     environment_id?: string;
     enabled?: boolean;
@@ -907,47 +902,6 @@ export const meowoneApi = {
       { method: "DELETE" },
     ),
 
-  // ============ Strategy Config API (调度配置) ============
-  listStrategyConfigs: (strategyId?: string, enabledOnly?: boolean) => {
-    const params = new URLSearchParams();
-    if (strategyId) params.set("strategy_id", strategyId);
-    if (enabledOnly !== undefined) params.set("enabled", String(enabledOnly));
-    const q = params.toString();
-    return request<{ count: number; configs: Record<string, unknown>[] }>(`/api/v3/strategy-configs${q ? `?${q}` : ""}`);
-  },
-  createStrategyConfig: (body: {
-    name: string;
-    description?: string;
-    strategy_id?: string;
-    config?: Record<string, unknown>;
-    template_type?: string;
-  }) =>
-    request<{ ok: boolean; config: Record<string, unknown> }>("/api/v3/strategy-configs", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  getStrategyConfig: (configId: string) =>
-    request<Record<string, unknown>>(`/api/v3/strategy-configs/${encodeURIComponent(configId)}`),
-  updateStrategyConfig: (configId: string, body: {
-    name?: string;
-    description?: string;
-    strategy_id?: string;
-    config?: Record<string, unknown>;
-    template_type?: string;
-    enabled?: boolean;
-  }) =>
-    request<{ ok: boolean; config: Record<string, unknown> }>(
-      `/api/v3/strategy-configs/${encodeURIComponent(configId)}`,
-      { method: "PUT", body: JSON.stringify(body) },
-    ),
-  deleteStrategyConfig: (configId: string) =>
-    request<{ ok: boolean; deleted: boolean }>(
-      `/api/v3/strategy-configs/${encodeURIComponent(configId)}`,
-      { method: "DELETE" },
-    ),
-  getStrategyConfigTemplates: () =>
-    request<{ templates: Record<string, unknown>[] }>("/api/v3/strategy-configs/templates"),
-
   // ============ Agent Instance API (智能体实例) ============
   listAgentInstances: (enabledOnly?: boolean) => {
     const q = enabledOnly !== undefined ? `?enabled=${enabledOnly}` : "";
@@ -957,7 +911,6 @@ export const meowoneApi = {
     name: string;
     description?: string;
     image_id: string;
-    environment_id?: string;
     model_name?: string;
     runtime_config?: Record<string, unknown>;
   }) =>
@@ -971,7 +924,6 @@ export const meowoneApi = {
     name?: string;
     description?: string;
     image_id?: string;
-    environment_id?: string;
     model_name?: string;
     runtime_config?: Record<string, unknown>;
     enabled?: boolean;

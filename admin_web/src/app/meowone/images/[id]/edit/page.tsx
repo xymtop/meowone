@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { meowoneApi } from "@/lib/meowone-api";
 
 type Agent = {
@@ -16,10 +16,23 @@ type Agent = {
 
 type Strategy = { id: string; name: string; description?: string };
 type Environment = { id: string; name: string; description?: string };
+type ImageDetail = {
+  id: string;
+  name: string;
+  description?: string;
+  agent_ids?: string[];
+  loop_id?: string;
+  strategy_id?: string;
+  environment_id?: string;
+  enabled: boolean;
+};
 
-export default function CreateImagePage() {
+export default function EditImagePage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const params = useParams();
+  const imageId = params.id as string;
+
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -37,38 +50,39 @@ export default function CreateImagePage() {
   const [selectedStrategy, setSelectedStrategy] = useState("");
   const [selectedEnv, setSelectedEnv] = useState("");
 
-  useEffect(() => {
-    void loadOptions();
-  }, []);
-
-  const loadOptions = async () => {
+  const loadAll = async () => {
     setLoading(true);
     setError("");
-    
-    // 分步加载，每个 API 独立处理
-    try {
-      const agentData = await meowoneApi.listAgents();
-      setAgents((agentData.agents || []) as Agent[]);
-    } catch (e) {
-      console.error("加载智能体失败:", e);
+
+    const [imageData, agentData, strategyData, envData] = await Promise.all([
+      meowoneApi.getAgentImage(imageId).catch(() => null),
+      meowoneApi.listAgents().catch(() => ({ agents: [] })),
+      meowoneApi.listStrategies().catch(() => ({ strategies: [] })),
+      meowoneApi.listEnvironments().catch(() => ({ environments: [] })),
+    ]);
+
+    if (!imageData) {
+      setError("镜像不存在");
+      setLoading(false);
+      return;
     }
-    
-    try {
-      const strategyData = await meowoneApi.listStrategies();
-      setStrategies((strategyData.strategies || []) as Strategy[]);
-    } catch (e) {
-      console.error("加载策略失败:", e);
-    }
-    
-    try {
-      const envData = await meowoneApi.listEnvironments();
-      setEnvironments((envData.environments || []) as Environment[]);
-    } catch (e) {
-      console.error("加载环境失败:", e);
-    }
-    
+
+    const image = imageData as ImageDetail;
+    setName(image.name || "");
+    setDescription(image.description || "");
+    setSelectedAgents(image.agent_ids || []);
+    setSelectedStrategy(image.strategy_id || "");
+    setSelectedEnv(image.environment_id || "");
+
+    setAgents((agentData as {agents: Agent[]}).agents || []);
+    setStrategies((strategyData as {strategies: Strategy[]}).strategies || []);
+    setEnvironments((envData as {environments: Environment[]}).environments || []);
     setLoading(false);
   };
+
+  useEffect(() => {
+    void loadAll();
+  }, [imageId]);
 
   const toggleAgent = (agentId: string) => {
     if (selectedAgents.includes(agentId)) {
@@ -92,13 +106,12 @@ export default function CreateImagePage() {
     setError("");
 
     try {
-      await meowoneApi.createAgentImage({
+      await meowoneApi.updateAgentImage(imageId, {
         name: name.trim(),
         description: description.trim(),
-        // 镜像存储的是选中的智能体ID列表（用JSON存储）
         agent_ids: selectedAgents,
-        strategy_id: selectedStrategy || undefined,
-        environment_id: selectedEnv || undefined,
+        strategy_id: selectedStrategy || null,
+        environment_id: selectedEnv || null,
       });
       router.push("/meowone/images");
     } catch (e) {
@@ -112,7 +125,7 @@ export default function CreateImagePage() {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="size-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
-        <span className="ml-3 text-gray-500">加载配置选项...</span>
+        <span className="ml-3 text-gray-500">加载镜像配置...</span>
       </div>
     );
   }
@@ -121,8 +134,8 @@ export default function CreateImagePage() {
     <div className="space-y-6">
       {/* 页面头部 */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">创建智能体镜像</h1>
-        <p className="mt-1 text-sm text-gray-500">选择多个智能体，并可选绑定调度策略与执行环境，组合成镜像</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">编辑智能体镜像</h1>
+        <p className="mt-1 text-sm text-gray-500">修改镜像配置，选择多个智能体，并可选绑定调度策略与执行环境</p>
       </div>
 
       {error && (
@@ -226,7 +239,7 @@ export default function CreateImagePage() {
           <p className="mt-3 text-sm text-gray-500">已选择 {selectedAgents.length} 个智能体</p>
         </div>
 
-        {/* 调度配置（不含推理模式 / Loop，由运行时或智能体自身配置决定） */}
+        {/* 调度配置 */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* 调度策略 */}
           <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-dark-3 dark:bg-dark-2">
@@ -306,7 +319,7 @@ export default function CreateImagePage() {
             disabled={saving || !name.trim() || selectedAgents.length === 0}
             className="rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-2.5 text-sm font-medium text-white disabled:opacity-50"
           >
-            {saving ? "创建中..." : "创建镜像"}
+            {saving ? "保存中..." : "保存修改"}
           </button>
         </div>
       </div>
