@@ -15,6 +15,8 @@ type Agent = {
 };
 
 type Strategy = { id: string; name: string; description?: string };
+type StrategyConfig = { id: string; name: string; description?: string; config?: Record<string, unknown>; template_type?: string };
+type Loop = { id: string; name: string; description?: string };
 type Environment = { id: string; name: string; description?: string };
 
 export default function CreateImagePage() {
@@ -30,12 +32,20 @@ export default function CreateImagePage() {
   // 数据
   const [agents, setAgents] = useState<Agent[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [strategyConfigs, setStrategyConfigs] = useState<StrategyConfig[]>([]);
+  const [loops, setLoops] = useState<Loop[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
 
   // 选择的值
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState("");
+  const [selectedStrategyConfig, setSelectedStrategyConfig] = useState("");
+  const [selectedLoop, setSelectedLoop] = useState("");
   const [selectedEnv, setSelectedEnv] = useState("");
+
+  // 手动编辑的策略配置（JSON）
+  const [strategyConfigJson, setStrategyConfigJson] = useState("");
+  const [showConfigEditor, setShowConfigEditor] = useState(false);
 
   useEffect(() => {
     void loadOptions();
@@ -44,29 +54,24 @@ export default function CreateImagePage() {
   const loadOptions = async () => {
     setLoading(true);
     setError("");
-    
-    // 分步加载，每个 API 独立处理
+
     try {
-      const agentData = await meowoneApi.listAgents();
+      const [agentData, strategyData, strategyConfigData, loopData, envData] = await Promise.all([
+        meowoneApi.listAgents().catch(() => ({ agents: [] })),
+        meowoneApi.listStrategies().catch(() => ({ strategies: [] })),
+        meowoneApi.listStrategyConfigs().catch(() => ({ configs: [] })),
+        meowoneApi.listLoops().catch(() => ({ loops: [] })),
+        meowoneApi.listEnvironments().catch(() => ({ environments: [] })),
+      ]);
       setAgents((agentData.agents || []) as Agent[]);
-    } catch (e) {
-      console.error("加载智能体失败:", e);
-    }
-    
-    try {
-      const strategyData = await meowoneApi.listStrategies();
       setStrategies((strategyData.strategies || []) as Strategy[]);
-    } catch (e) {
-      console.error("加载策略失败:", e);
-    }
-    
-    try {
-      const envData = await meowoneApi.listEnvironments();
+      setStrategyConfigs((strategyConfigData.configs || []) as StrategyConfig[]);
+      setLoops((loopData.loops || []) as Loop[]);
       setEnvironments((envData.environments || []) as Environment[]);
     } catch (e) {
-      console.error("加载环境失败:", e);
+      console.error("加载配置失败:", e);
     }
-    
+
     setLoading(false);
   };
 
@@ -75,6 +80,34 @@ export default function CreateImagePage() {
       setSelectedAgents(selectedAgents.filter((id) => id !== agentId));
     } else {
       setSelectedAgents([...selectedAgents, agentId]);
+    }
+  };
+
+  const handleStrategyConfigChange = (configId: string) => {
+    setSelectedStrategyConfig(configId);
+    if (configId) {
+      const config = strategyConfigs.find(c => c.id === configId);
+      if (config?.config) {
+        setStrategyConfigJson(JSON.stringify(config.config, null, 2));
+      } else {
+        // 根据模板类型设置默认配置
+        const template = config?.template_type;
+        if (template === "master_slave") {
+          const defaultConfig = {
+            topology: "master_slave",
+            master: selectedAgents[0] || "",
+            slaves: selectedAgents.slice(1),
+            routing: "master_collects"
+          };
+          setStrategyConfigJson(JSON.stringify(defaultConfig, null, 2));
+        } else {
+          setStrategyConfigJson("{}");
+        }
+      }
+      setShowConfigEditor(true);
+    } else {
+      setShowConfigEditor(false);
+      setStrategyConfigJson("");
     }
   };
 
@@ -91,13 +124,27 @@ export default function CreateImagePage() {
     setSaving(true);
     setError("");
 
+    // 解析策略配置 JSON
+    let strategyConfig: Record<string, unknown> = {};
+    if (strategyConfigJson.trim()) {
+      try {
+        strategyConfig = JSON.parse(strategyConfigJson);
+      } catch {
+        setError("策略配置 JSON 格式错误");
+        setSaving(false);
+        return;
+      }
+    }
+
     try {
       await meowoneApi.createAgentImage({
         name: name.trim(),
         description: description.trim(),
-        // 镜像存储的是选中的智能体ID列表（用JSON存储）
         agent_ids: selectedAgents,
+        loop_id: selectedLoop || undefined,
         strategy_id: selectedStrategy || undefined,
+        strategy_config_id: selectedStrategyConfig || undefined,
+        strategy_config: Object.keys(strategyConfig).length > 0 ? strategyConfig : undefined,
         environment_id: selectedEnv || undefined,
       });
       router.push("/meowone/images");
@@ -122,7 +169,9 @@ export default function CreateImagePage() {
       {/* 页面头部 */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">创建智能体镜像</h1>
-        <p className="mt-1 text-sm text-gray-500">选择多个智能体，并可选绑定调度策略与执行环境，组合成镜像</p>
+        <p className="mt-1 text-sm text-gray-500">
+          选择多个智能体、Loop 模式、调度策略和配置，构建为一个镜像
+        </p>
       </div>
 
       {error && (
@@ -143,7 +192,7 @@ export default function CreateImagePage() {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="例如：我的助手镜像"
+                placeholder="例如：开发团队镜像"
                 className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm dark:border-dark-3 dark:bg-dark"
               />
             </div>
@@ -226,8 +275,40 @@ export default function CreateImagePage() {
           <p className="mt-3 text-sm text-gray-500">已选择 {selectedAgents.length} 个智能体</p>
         </div>
 
-        {/* 调度配置（不含推理模式 / Loop，由运行时或智能体自身配置决定） */}
+        {/* 调度配置 */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Loop 模式 */}
+          <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-dark-3 dark:bg-dark-2">
+            <h2 className="mb-4 text-lg font-semibold">Loop 模式</h2>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="loop"
+                  checked={selectedLoop === ""}
+                  onChange={() => setSelectedLoop("")}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm">默认 (react)</span>
+              </label>
+              {loops.map((loop) => (
+                <label key={loop.id} className="flex items-start gap-2">
+                  <input
+                    type="radio"
+                    name="loop"
+                    checked={selectedLoop === loop.id}
+                    onChange={() => setSelectedLoop(loop.id)}
+                    className="mt-1 h-4 w-4"
+                  />
+                  <div>
+                    <div className="text-sm font-medium">{loop.name}</div>
+                    <div className="text-xs text-gray-500">{loop.description || ""}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/* 调度策略 */}
           <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-dark-3 dark:bg-dark-2">
             <h2 className="mb-4 text-lg font-semibold">调度策略</h2>
@@ -259,37 +340,103 @@ export default function CreateImagePage() {
               ))}
             </div>
           </div>
+        </div>
 
-          {/* 执行环境 */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-dark-3 dark:bg-dark-2">
-            <h2 className="mb-4 text-lg font-semibold">执行环境</h2>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2">
+        {/* 调度配置文件 */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-dark-3 dark:bg-dark-2">
+          <div className="flex items-center justify-between">
+            <h2 className="mb-4 text-lg font-semibold">调度配置文件</h2>
+            <button
+              onClick={() => router.push("/meowone/scheduler/strategy-configs")}
+              className="text-sm text-blue-500 hover:underline"
+            >
+              管理配置
+            </button>
+          </div>
+          <div className="space-y-3">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="strategyConfig"
+                checked={selectedStrategyConfig === ""}
+                onChange={() => handleStrategyConfigChange("")}
+                className="h-4 w-4"
+              />
+              <span className="text-sm">无（使用默认调度）</span>
+            </label>
+            {strategyConfigs.map((config) => (
+              <label key={config.id} className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="strategyConfig"
+                  checked={selectedStrategyConfig === config.id}
+                  onChange={() => handleStrategyConfigChange(config.id)}
+                  className="mt-1 h-4 w-4"
+                />
+                <div>
+                  <div className="text-sm font-medium">
+                    {config.name}
+                    {config.template_type && config.template_type !== "custom" && (
+                      <span className="ml-2 rounded bg-purple-100 px-1.5 py-0.5 text-xs text-purple-600">
+                        {config.template_type}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-500">{config.description || ""}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+
+          {/* 配置编辑器 */}
+          {showConfigEditor && (
+            <div className="mt-4">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                调度配置 (JSON)
+              </label>
+              <textarea
+                value={strategyConfigJson}
+                onChange={(e) => setStrategyConfigJson(e.target.value)}
+                rows={6}
+                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-mono dark:border-dark-3 dark:bg-dark"
+                placeholder='{"topology": "master_slave", "master": "agent_id", "slaves": []}'
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                根据选择的配置模板编辑调度参数，如指定主智能体、从智能体等
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* 执行环境 */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-dark-3 dark:bg-dark-2">
+          <h2 className="mb-4 text-lg font-semibold">执行环境</h2>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2">
+              <input
+                type="radio"
+                name="env"
+                checked={selectedEnv === ""}
+                onChange={() => setSelectedEnv("")}
+                className="h-4 w-4"
+              />
+              <span className="text-sm">默认</span>
+            </label>
+            {environments.map((env) => (
+              <label key={env.id} className="flex items-start gap-2">
                 <input
                   type="radio"
                   name="env"
-                  checked={selectedEnv === ""}
-                  onChange={() => setSelectedEnv("")}
-                  className="h-4 w-4"
+                  checked={selectedEnv === env.id}
+                  onChange={() => setSelectedEnv(env.id)}
+                  className="mt-1 h-4 w-4"
                 />
-                <span className="text-sm">默认</span>
+                <div>
+                  <div className="text-sm font-medium">{env.name}</div>
+                  <div className="text-xs text-gray-500">{env.description || ""}</div>
+                </div>
               </label>
-              {environments.map((env) => (
-                <label key={env.id} className="flex items-start gap-2">
-                  <input
-                    type="radio"
-                    name="env"
-                    checked={selectedEnv === env.id}
-                    onChange={() => setSelectedEnv(env.id)}
-                    className="mt-1 h-4 w-4"
-                  />
-                  <div>
-                    <div className="text-sm font-medium">{env.name}</div>
-                    <div className="text-xs text-gray-500">{env.description || ""}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
+            ))}
           </div>
         </div>
 
