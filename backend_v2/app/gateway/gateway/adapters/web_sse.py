@@ -21,6 +21,7 @@ async def stream_web_sse_turn(
     agent_name: str | None = None,
     agent_type: str | None = None,
     agent_id: str | None = None,
+    instance_id: str | None = None,
     model_name: str | None = None,
 ) -> AsyncIterator[Dict[str, str]]:
     async for item in service.stream_turn(
@@ -34,6 +35,7 @@ async def stream_web_sse_turn(
         agent_name=agent_name,
         agent_type=agent_type,
         agent_id=agent_id,
+        instance_id=instance_id,
         model_name=model_name,
     ):
         log_stream_service.append_log(

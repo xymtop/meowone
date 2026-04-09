@@ -71,6 +71,7 @@ async def chat(session_id: str, body: ChatRequest):
 
     agent_name = body.agent_name
     agent_id = (body.agent_id or "").strip() or None
+    instance_id = (body.instance_id or "").strip() or None
     agent_type = "internal"
     if agent_id:
         row = await agent_service.get_agent_by_id(agent_id)
@@ -98,6 +99,7 @@ async def chat(session_id: str, body: ChatRequest):
             agent_name=agent_name,
             agent_type=agent_type,
             agent_id=agent_id,
+            instance_id=instance_id,
             model_name=body.model_name,
         )
     )
@@ -118,6 +120,7 @@ async def card_action(session_id: str, body: CardActionRequest):
 
     agent_name = body.agent_name
     agent_id = (body.agent_id or "").strip() or None
+    instance_id = (body.instance_id or "").strip() or None
     agent_type = "internal"
     if agent_id:
         row = await agent_service.get_agent_by_id(agent_id)
@@ -145,6 +148,7 @@ async def card_action(session_id: str, body: CardActionRequest):
             agent_name=agent_name,
             agent_type=agent_type,
             agent_id=agent_id,
+            instance_id=instance_id,
             model_name=body.model_name,
         )
     )
@@ -163,6 +167,7 @@ async def a2ui_action(session_id: str, body: A2UIActionRequest):
 
     agent_name = body.agent_name
     agent_id = (body.agent_id or "").strip() or None
+    instance_id = (body.instance_id or "").strip() or None
     agent_type = "internal"
     if agent_id:
         row = await agent_service.get_agent_by_id(agent_id)
@@ -190,6 +195,7 @@ async def a2ui_action(session_id: str, body: A2UIActionRequest):
             agent_name=agent_name,
             agent_type=agent_type,
             agent_id=agent_id,
+            instance_id=instance_id,
             model_name=body.model_name,
         )
     )

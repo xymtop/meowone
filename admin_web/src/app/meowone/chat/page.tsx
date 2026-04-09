@@ -1136,8 +1136,10 @@ function ChatContent() {
       await meowoneApi.streamChat(targetSessionId, {
         content: text,
         channel_id: "web",
-        // 根据 mode 选择 agent_id
-        agent_id: selectedTarget.id,
+        // 根据 mode 选择 instance_id 或 agent_id
+        ...(selectedTarget.mode === "instance"
+          ? { instance_id: selectedTarget.id }
+          : { agent_id: selectedTarget.id }),
       }, onStreamEvent, {
         signal: controller.signal,
       });
@@ -1171,7 +1173,9 @@ function ChatContent() {
         {
           action: action as unknown as Record<string, unknown>,
           channel_id: "web",
-          agent_id: selectedTarget.id,
+          ...(selectedTarget.mode === "instance"
+            ? { instance_id: selectedTarget.id }
+            : { agent_id: selectedTarget.id }),
         },
         onStreamEvent,
         { signal: controller.signal },

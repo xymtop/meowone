@@ -3,7 +3,12 @@ Team Dispatch 调度策略 —— 团队分发
 
 将用户任务分解为子任务，分配给团队成员并行/串行执行，最后汇总结果。
 
-策略配置 JSON 格式：
+设计：
+  - team_id 必须由用户在 strategy_config 中配置（业务语义，无法自动推导）
+  - 团队成员来源：agent_ids_json（gateway 已预填充到 ctx.candidate_runtimes）
+  - 其他参数（parallel、decompose_prompt、max_members）全部有默认值
+
+strategy_config 格式：
     {
         "team_id": "团队 ID（必填）",
         "decompose_prompt": "自定义分解提示词（可选）",
@@ -18,69 +23,74 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any, AsyncIterator, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.dispatch.context import DispatchContext
 
 from app.dispatch.registry import dispatch_strategy
-from app.dispatch.context import DispatchContext
-from app.loop.events import (
-    LoopEvent, ErrorEvent, DoneEvent, ThinkingEvent, DeltaEvent,
-)
+from app.loop.events import LoopEvent, ErrorEvent, DoneEvent, ThinkingEvent, DeltaEvent
 
 logger = logging.getLogger(__name__)
 
 
 @dispatch_strategy("team_dispatch")
-async def team_dispatch_strategy(ctx: DispatchContext) -> AsyncIterator[LoopEvent]:
+async def team_dispatch_strategy(ctx: "DispatchContext") -> AsyncIterator[LoopEvent]:
     """
     团队分发策略
 
-    流程：
-    1. 从 strategy_config 读取 team_id
-    2. 从数据库查询团队成员 agent_id 列表
-    3. 用 LLM 将任务分解为 N 个子任务（N = 成员数）
-    4. 并行/串行调用各成员智能体
-    5. 汇总结果输出
+    team_id：必须从 strategy_config 获取（用户显式配置）
+    团队成员：从 gateway 预填充的 ctx.candidate_runtimes 取
     """
-    from app.agents.builder import agent_builder
     from app.agents.caller import call_agent, AgentCallInput
-    from app.db.queries.teams import get_team_by_id, list_team_member_agent_ids
-    from app.loop.events import DeltaEvent
 
     config = ctx.strategy_config
-    team_id = str(config.get("team_id") or "").strip()
     parallel = bool(config.get("parallel", True))
     max_members = int(config.get("max_members", 5))
     decompose_prompt = str(config.get("decompose_prompt") or "").strip()
 
+    # team_id 必须用户配置（业务语义，无法自动推导）
+    team_id = str(config.get("team_id") or "").strip()
     if not team_id:
-        yield ErrorEvent(code="MISSING_CONFIG", message="team_dispatch 策略需要 strategy_config.team_id")
+        # 尝试从镜像 metadata_json.team_name 兜底
+        team_id = str(config.get("team_name") or "").strip()
+    if not team_id:
+        yield ErrorEvent(
+            code="MISSING_CONFIG",
+            message="team_dispatch 策略需要在 strategy_config 中配置 team_id",
+        )
         yield DoneEvent(message_id=ctx.message_id, loop_rounds=0, total_duration=0)
         return
 
-    # 查询团队成员
-    member_ids = await list_team_member_agent_ids(team_id)
-    if not member_ids:
-        yield ErrorEvent(code="NO_TEAM_MEMBERS", message=f"团队 {team_id} 没有成员")
+    # 团队成员来自 ctx.candidate_runtimes（gateway 从 agent_ids_json 预填充）
+    all_members: List[Any] = list(ctx.candidate_runtimes)
+
+    # 如果 gateway 没有预填充（直接从 agent_id 调用），则从 image.agent_ids_json 加载
+    if not all_members and ctx.image_id:
+        all_members = await _load_members_from_image(ctx.agent_id or "", ctx.image_id)
+
+    if not all_members:
+        yield ErrorEvent(code="NO_TEAM_MEMBERS", message=f"团队 {team_id} 没有可用成员")
         yield DoneEvent(message_id=ctx.message_id, loop_rounds=0, total_duration=0)
         return
 
-    member_ids = member_ids[:max_members]
+    member_runtimes = all_members[:max_members]
 
-    yield ThinkingEvent(step=1, description=f"团队分发：正在将任务分解给 {len(member_ids)} 个团队成员...")
+    yield ThinkingEvent(
+        step=1,
+        description=f"团队 [{team_id}]：正在将任务分解给 {len(member_runtimes)} 个成员..."
+    )
 
-    # 分解任务（用 LLM 生成子任务，或简单复制）
+    # 分解任务
     subtasks = await _decompose_task(
         task=ctx.user_message,
-        num_members=len(member_ids),
+        num_members=len(member_runtimes),
         decompose_prompt=decompose_prompt,
         model=ctx.model,
     )
 
     # 执行子任务
-    async def _run_member(member_id: str, subtask: str) -> str:
-        runtime = await agent_builder.build_by_id(member_id)
-        if not runtime:
-            return f"[成员 {member_id} 未找到]"
+    async def _run_member(runtime: Any, subtask: str) -> str:
         call_input = AgentCallInput(
             user_message=subtask,
             history=ctx.history,
@@ -96,25 +106,46 @@ async def team_dispatch_strategy(ctx: DispatchContext) -> AsyncIterator[LoopEven
 
     if parallel:
         yield ThinkingEvent(step=2, description="并行执行团队成员任务...")
-        tasks = [_run_member(mid, subtask) for mid, subtask in zip(member_ids, subtasks)]
+        tasks = [_run_member(r, s) for r, s in zip(member_runtimes, subtasks)]
         results: List[Any] = await asyncio.gather(*tasks, return_exceptions=True)
     else:
         results = []
-        for idx, (mid, subtask) in enumerate(zip(member_ids, subtasks), start=2):
-            yield ThinkingEvent(step=idx, description=f"执行成员 {mid}...")
-            r = await _run_member(mid, subtask)
-            results.append(r)
+        for idx, (r, subtask) in enumerate(zip(member_runtimes, subtasks), start=2):
+            yield ThinkingEvent(step=idx, description=f"执行成员 {r.name}...")
+            res = await _run_member(r, subtask)
+            results.append(res)
 
     # 汇总结果
     summary_parts: List[str] = ["## 团队执行结果\n"]
-    for i, (mid, result) in enumerate(zip(member_ids, results), start=1):
+    for i, (r, result) in enumerate(zip(member_runtimes, results), start=1):
         r_str = str(result) if not isinstance(result, Exception) else f"[错误: {result}]"
-        summary_parts.append(f"**成员 {i}（{mid}）**：\n{r_str}\n")
+        summary_parts.append(f"**成员 {i}（{r.name}）**：\n{r_str}\n")
 
     summary = "\n".join(summary_parts)
     yield DeltaEvent(message_id=ctx.message_id, content=summary, done=False)
     yield DeltaEvent(message_id=ctx.message_id, content="", done=True)
-    yield DoneEvent(message_id=ctx.message_id, loop_rounds=len(member_ids), total_duration=0)
+    yield DoneEvent(message_id=ctx.message_id, loop_rounds=len(member_runtimes), total_duration=0)
+
+
+async def _load_members_from_image(exclude_agent_id: str, image_id: str) -> List[Any]:
+    """从 image.agent_ids_json 加载成员运行时"""
+    from app.agents.builder import agent_builder
+    from app.db.queries.agent_instances import get_agent_image_by_id
+
+    try:
+        image = await get_agent_image_by_id(image_id)
+        if not image:
+            return []
+        agent_ids: List[str] = image.get("agent_ids_json") or []
+        members: List[Any] = []
+        for aid in agent_ids:
+            if aid and aid != exclude_agent_id:
+                r = await agent_builder.build_by_id(aid)
+                if r:
+                    members.append(r)
+        return members
+    except Exception:
+        return []
 
 
 async def _decompose_task(
@@ -144,12 +175,10 @@ async def _decompose_task(
 
         lines = [ln.strip() for ln in content.strip().splitlines() if ln.strip()]
         if lines:
-            # 补齐或截断到 num_members
             while len(lines) < num_members:
                 lines.append(task)
             return lines[:num_members]
     except Exception as e:
         logger.warning("任务分解失败，回退到复制策略: %s", e)
 
-    # Fallback：直接复制
     return [f"[子任务 {i+1}/{num_members}] {task}" for i in range(num_members)]

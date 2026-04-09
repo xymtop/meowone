@@ -51,6 +51,7 @@ class ConversationTurnService:
         agent_name: Optional[str] = None,
         agent_type: Optional[str] = None,
         agent_id: Optional[str] = None,
+        instance_id: Optional[str] = None,
         model_name: Optional[str] = None,
     ) -> AsyncIterator[Dict[str, str]]:
         """
@@ -68,6 +69,7 @@ class ConversationTurnService:
             agent_name: 智能体名称
             agent_type: 智能体类型
             agent_id: 智能体 ID
+            instance_id: 实例 ID
             model_name: 模型名称
 
         Yields:
@@ -93,7 +95,7 @@ class ConversationTurnService:
         }
 
         # 4. 调用 dispatch 层（统一入口）
-        logger.info("stream_turn: 开始调用 dispatch, agent_id=%s, agent_name=%s", agent_id, agent_name)
+        logger.info("stream_turn: 开始调用 dispatch, agent_id=%s, instance_id=%s, agent_name=%s", agent_id, instance_id, agent_name)
         
         # 用于累积 assistant 消息内容
         assistant_parts: List[str] = []
@@ -104,6 +106,7 @@ class ConversationTurnService:
             history=history,
             session_id=session_id,
             agent_id=agent_id,
+            instance_id=instance_id,
             agent_name=agent_name,
             model=model_name,
         ):

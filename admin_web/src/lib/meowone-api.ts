@@ -55,6 +55,8 @@ export type ChatStreamInput = {
   agent_type?: string;
   /** 数据库主键，优先于 agent_name */
   agent_id?: string;
+  /** 实例 ID，传此字段表示给实例发消息（与 agent_id 互斥）*/
+  instance_id?: string;
   /** 仅默认智能体：用户选择的模型名 */
   model_name?: string;
 };
@@ -69,6 +71,7 @@ export type A2UIActionInput = {
   agent_name?: string;
   agent_type?: string;
   agent_id?: string;
+  instance_id?: string;
   model_name?: string;
 };
 
@@ -314,6 +317,7 @@ export const meowoneApi = {
         agent_name: input.agent_name,
         agent_type: input.agent_type,
         agent_id: input.agent_id,
+        instance_id: input.instance_id,
         model_name: input.model_name,
       },
       onEvent,
@@ -338,6 +342,7 @@ export const meowoneApi = {
         agent_name: input.agent_name,
         agent_type: input.agent_type,
         agent_id: input.agent_id,
+        instance_id: input.instance_id,
         model_name: input.model_name,
       },
       onEvent,

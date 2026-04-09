@@ -43,6 +43,7 @@ class ChatRequest(BaseModel):
     agent_name: Optional[str] = Field(default=None, description="指定智能体名称")
     agent_type: Optional[str] = Field(default=None, description="智能体类型（internal/external）")
     agent_id: Optional[str] = Field(default=None, description="指定智能体ID（优先于name）")
+    instance_id: Optional[str] = Field(default=None, description="指定实例ID（与agent_id互斥，传instance_id时走实例调度路径）")
     model_name: Optional[str] = Field(default=None, description="指定模型名称")
 
 
@@ -64,6 +65,7 @@ class CardActionRequest(BaseModel):
     agent_name: Optional[str] = Field(default=None, description="指定智能体名称")
     agent_type: Optional[str] = Field(default=None, description="智能体类型")
     agent_id: Optional[str] = Field(default=None, description="指定智能体ID")
+    instance_id: Optional[str] = Field(default=None, description="指定实例ID")
     model_name: Optional[str] = Field(default=None, description="指定模型名称")
 
 
@@ -83,6 +85,7 @@ class A2UIActionRequest(BaseModel):
     agent_name: Optional[str] = Field(default=None, description="指定智能体名称")
     agent_type: Optional[str] = Field(default=None, description="智能体类型")
     agent_id: Optional[str] = Field(default=None, description="指定智能体ID")
+    instance_id: Optional[str] = Field(default=None, description="指定实例ID")
     model_name: Optional[str] = Field(default=None, description="指定模型名称")
 
 
