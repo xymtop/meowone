@@ -96,6 +96,7 @@ class ConversationTurnService:
         agent_capability_filter: Optional[CapabilityFilter] = None
         llm_model: str | None = (model_name or "").strip() or None
         agent_loop_mode: str = DEFAULT_LOOP_MODE
+        agent_base_allowed: List[str] = []  # MCP + skills 的基础工具
         allow_tools: List[str] = []
         deny_tools: List[str] = []
 
@@ -127,7 +128,6 @@ class ConversationTurnService:
                 llm_model = meta_model
 
             # 从 metadata_json 中读取 loop_mode
-            agent_loop_mode: str = DEFAULT_LOOP_MODE
             metadata = agent_cfg.get("metadata_json") or {}
             if isinstance(metadata, str) and metadata:
                 metadata = json.loads(metadata)
@@ -135,31 +135,25 @@ class ConversationTurnService:
             if raw_loop_mode and raw_loop_mode in SUPPORTED_LOOP_MODES:
                 agent_loop_mode = raw_loop_mode
 
-            if mcp_servers or agent_skills or allow_tools or deny_tools:
-                base_allowed: List[str] = []
-                if mcp_servers:
-                    base_allowed.extend(["list_mcp_tools", "call_mcp_tool"])
-                if agent_skills:
-                    base_allowed.append("load_agent_skill")
+            # 构建智能体的基础工具列表（MCP + skills）
+            if mcp_servers:
+                agent_base_allowed.extend(["list_mcp_tools", "call_mcp_tool"])
+            if agent_skills:
+                agent_base_allowed.append("load_agent_skill")
 
-                if deny_tools:
-                    if allow_tools:
-                        all_allowed = list(dict.fromkeys(base_allowed + allow_tools))
-                        agent_capability_filter = CapabilityFilter(allow_names=all_allowed, deny_names=deny_tools)
-                    elif base_allowed:
-                        agent_capability_filter = CapabilityFilter(allow_names=base_allowed, deny_names=deny_tools)
-                    else:
-                        agent_capability_filter = CapabilityFilter(allow_names=None, deny_names=deny_tools)
-                elif allow_tools:
-                    all_allowed = list(dict.fromkeys(base_allowed + allow_tools))
-                    agent_capability_filter = CapabilityFilter(allow_names=all_allowed, deny_names=None)
-                elif base_allowed:
-                    agent_capability_filter = CapabilityFilter(allow_names=base_allowed, deny_names=None)
-                else:
-                    agent_capability_filter = CapabilityFilter(allow_names=allow_tools, deny_names=None)
-            else:
-                # 智能体未配置任何工具策略时，主模型由下方的调度层过滤接管
-                pass
+            # 构建智能体的工具权限过滤
+            # 优先级：allow_tools > base_allowed（MCP + skills） > None（允许所有）
+            if allow_tools:
+                # 显式配置的 allow_tools 优先
+                final_allow = list(dict.fromkeys(agent_base_allowed + allow_tools))
+                agent_capability_filter = CapabilityFilter(allow_names=final_allow, deny_names=deny_tools if deny_tools else None)
+            elif agent_base_allowed:
+                # 只有 MCP/skills 配置，使用 base_allowed
+                agent_capability_filter = CapabilityFilter(allow_names=agent_base_allowed, deny_names=deny_tools if deny_tools else None)
+            elif deny_tools:
+                # 只有 deny_tools，没有 allow
+                agent_capability_filter = CapabilityFilter(allow_names=None, deny_names=deny_tools)
+            # else: agent_capability_filter 保持 None，表示没有任何限制
 
             if mcp_servers:
                 yield {
@@ -186,15 +180,22 @@ class ConversationTurnService:
             if allow or deny:
                 effective_filter = CapabilityFilter(allow_names=allow, deny_names=deny)
 
+        # 合并智能体和渠道的权限
         if agent_capability_filter:
-            base_allow = list(effective_filter.allow_names) if effective_filter and effective_filter.allow_names else []
-            base_deny = list(effective_filter.deny_names) if effective_filter and effective_filter.deny_names else []
-            agent_deny = list(agent_capability_filter.deny_names or []) if agent_capability_filter.deny_names else []
+            agent_allow = agent_capability_filter.allow_names
+            agent_deny = list(agent_capability_filter.deny_names) if agent_capability_filter.deny_names else []
 
-            if agent_capability_filter.allow_names is not None:
-                merged_allow = list(agent_capability_filter.allow_names)
+            if agent_allow is not None and agent_allow:
+                # 智能体显式配置了允许列表
+                merged_allow = list(agent_allow)
+            elif effective_filter and effective_filter.allow_names:
+                # 智能体未配置，使用渠道的
+                merged_allow = list(effective_filter.allow_names)
             else:
-                merged_allow = base_allow or None
+                # 都没有有效配置，使用智能体的 base_allowed（MCP + skills）
+                merged_allow = agent_base_allowed if agent_base_allowed else None
+
+            base_deny = list(effective_filter.deny_names) if effective_filter and effective_filter.deny_names else []
             merged_deny = list(dict.fromkeys(base_deny + agent_deny)) or None
             effective_filter = CapabilityFilter(allow_names=merged_allow, deny_names=merged_deny)
 
