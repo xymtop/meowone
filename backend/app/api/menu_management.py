@@ -7,7 +7,21 @@ from pydantic import BaseModel
 
 from app.services import menu_service
 
-router = APIRouter(prefix="/api/menus", tags=["menu-management"])
+"""
+# 菜单管理 API
+
+管理前端导航菜单配置。
+
+## 主要功能
+- 列出所有菜单
+- 获取菜单详情
+- 创建/更新菜单
+- 删除菜单
+
+## 菜单层级
+支持多级菜单，通过 `parent_key` 关联父级菜单。
+"""
+router = APIRouter(prefix="/api/menus", tags=["菜单管理"])
 
 
 class MenuUpsertRequest(BaseModel):

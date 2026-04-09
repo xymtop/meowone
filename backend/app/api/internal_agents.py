@@ -7,7 +7,21 @@ from pydantic import BaseModel
 
 from app.agents.internal_factory import InternalAgentSpec, internal_agent_factory
 
-router = APIRouter(prefix="/api/internal-agents", tags=["internal-agents"])
+"""
+# 内部智能体运行 API
+
+运行时内部智能体的管理和调用。
+
+## 主要功能
+- 列出所有内部智能体
+- 创建内部智能体
+- 调用内部智能体执行任务
+
+## 与 /api/agents 的区别
+- `/api/agents` - 管理智能体配置（持久化到数据库）
+- `/api/internal-agents` - 运行时调用（内存中执行）
+"""
+router = APIRouter(prefix="/api/internal-agents", tags=["内部智能体"])
 
 
 class InternalAgentCreateRequest(BaseModel):

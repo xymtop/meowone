@@ -1,69 +1,95 @@
 from __future__ import annotations
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict, List
 
 
 class Attachment(BaseModel):
-    """Binary attachment as base64 (image or small text file)."""
+    """
+    二进制附件（base64 编码）
 
-    name: str = ""
-    mime: str = "application/octet-stream"
-    data: str = ""  # base64
+    用于图片或多模态输入，支持任意二进制数据。
+    """
+
+    name: str = Field(default="", description="文件名")
+    mime: str = Field(default="application/octet-stream", description="MIME类型")
+    data: str = Field(default="", description="base64编码的二进制数据")
 
 
 class ChatRequest(BaseModel):
-    content: str = ""
-    type: str = "text"
-    attachments: Optional[List[Attachment]] = None
-    channel_id: Optional[str] = None
-    max_rounds: Optional[int] = None
-    max_tool_phases: Optional[int] = None
-    timeout_seconds: Optional[int] = None
-    scheduler_mode: Optional[str] = None
-    task_tag: Optional[str] = None
-    agent_name: Optional[str] = None
-    agent_type: Optional[str] = None
-    agent_id: Optional[str] = None
-    model_name: Optional[str] = None
+    """
+    聊天请求
+
+    用于向会话发送用户消息，支持文本和多模态输入。
+    """
+
+    content: str = Field(default="", description="消息内容")
+    type: str = Field(default="text", description="消息类型（text/markdown等）")
+    attachments: Optional[List[Attachment]] = Field(default=None, description="附件列表")
+    channel_id: Optional[str] = Field(default=None, description="渠道ID")
+    max_rounds: Optional[int] = Field(default=None, description="最大对话轮次")
+    max_tool_phases: Optional[int] = Field(default=None, description="最大工具调用阶段数")
+    timeout_seconds: Optional[int] = Field(default=None, description="超时时间（秒）")
+    scheduler_mode: Optional[str] = Field(default=None, description="调度模式（direct/hierarchical等）")
+    task_tag: Optional[str] = Field(default=None, description="任务标签")
+    agent_name: Optional[str] = Field(default=None, description="指定智能体名称")
+    agent_type: Optional[str] = Field(default=None, description="智能体类型（internal/external）")
+    agent_id: Optional[str] = Field(default=None, description="指定智能体ID（优先于name）")
+    model_name: Optional[str] = Field(default=None, description="指定模型名称")
 
 
 class CardActionRequest(BaseModel):
-    cardId: str
-    actionId: str
-    payload: Dict[str, Any] = {}
-    channel_id: Optional[str] = None
-    max_rounds: Optional[int] = None
-    max_tool_phases: Optional[int] = None
-    timeout_seconds: Optional[int] = None
-    scheduler_mode: Optional[str] = None
-    task_tag: Optional[str] = None
-    agent_name: Optional[str] = None
-    agent_type: Optional[str] = None
-    agent_id: Optional[str] = None
-    model_name: Optional[str] = None
+    """
+    卡片动作请求
+
+    用于处理用户与卡片交互后的回调。
+    """
+
+    cardId: str = Field(..., description="卡片ID")
+    actionId: str = Field(..., description="动作ID")
+    payload: Dict[str, Any] = Field(default_factory=dict, description="动作载荷数据")
+    channel_id: Optional[str] = Field(default=None, description="渠道ID")
+    max_rounds: Optional[int] = Field(default=None, description="最大对话轮次")
+    max_tool_phases: Optional[int] = Field(default=None, description="最大工具调用阶段数")
+    timeout_seconds: Optional[int] = Field(default=None, description="超时时间（秒）")
+    scheduler_mode: Optional[str] = Field(default=None, description="调度模式")
+    task_tag: Optional[str] = Field(default=None, description="任务标签")
+    agent_name: Optional[str] = Field(default=None, description="指定智能体名称")
+    agent_type: Optional[str] = Field(default=None, description="智能体类型")
+    agent_id: Optional[str] = Field(default=None, description="指定智能体ID")
+    model_name: Optional[str] = Field(default=None, description="指定模型名称")
 
 
 class A2UIActionRequest(BaseModel):
-    """客户端 @a2ui-sdk/react 派发的 ActionPayload（surfaceId / name / context 等）。"""
+    """
+    A2UI 动作请求
 
-    action: Dict[str, Any]
-    channel_id: Optional[str] = None
-    max_rounds: Optional[int] = None
-    max_tool_phases: Optional[int] = None
-    timeout_seconds: Optional[int] = None
-    scheduler_mode: Optional[str] = None
-    task_tag: Optional[str] = None
-    agent_name: Optional[str] = None
-    agent_type: Optional[str] = None
-    agent_id: Optional[str] = None
-    model_name: Optional[str] = None
+    客户端 @a2ui-sdk/react 派发的 ActionPayload（surfaceId / name / context 等）。
+    """
+
+    action: Dict[str, Any] = Field(..., description="动作数据（包含 surfaceId、name、context 等）")
+    channel_id: Optional[str] = Field(default=None, description="渠道ID")
+    max_rounds: Optional[int] = Field(default=None, description="最大对话轮次")
+    max_tool_phases: Optional[int] = Field(default=None, description="最大工具调用��段数")
+    timeout_seconds: Optional[int] = Field(default=None, description="超时时间（秒）")
+    scheduler_mode: Optional[str] = Field(default=None, description="调度模式")
+    task_tag: Optional[str] = Field(default=None, description="任务标签")
+    agent_name: Optional[str] = Field(default=None, description="指定智能体名称")
+    agent_type: Optional[str] = Field(default=None, description="智能体类型")
+    agent_id: Optional[str] = Field(default=None, description="指定智能体ID")
+    model_name: Optional[str] = Field(default=None, description="指定模型名称")
 
 
 class MessageResponse(BaseModel):
-    id: str
-    session_id: str
-    role: str
-    content_type: str
-    content: Optional[str]
-    card_data: Optional[Any]
-    created_at: str
+    """
+    消息响应
+
+    会话中的消息数据结构。
+    """
+
+    id: str = Field(..., description="消息ID")
+    session_id: str = Field(..., description="会话ID")
+    role: str = Field(..., description="角色（user/assistant/tool/system）")
+    content_type: str = Field(..., description="内容类型（text/card/cards等）")
+    content: Optional[str] = Field(default=None, description="消息文本内容")
+    card_data: Optional[Any] = Field(default=None, description="卡片数据（当 content_type 为 card 时）")
+    created_at: str = Field(..., description="创建时间 ISO8601 格式")

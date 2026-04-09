@@ -3,11 +3,33 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.services import agent_image_service
 
-router = APIRouter(prefix="/api/v3", tags=["v3_images"])
+"""
+# v3 智能体镜像 API
+
+Agent Image（智能体镜像）和 Agent Instance（智能体实例）管理。
+
+## 概念说明
+
+### Agent Image (智能体镜像)
+预配置的智能体组合，包含：
+- 智能体列表
+- Loop 模式
+- 调度策略
+- 执行环境
+
+### Agent Instance (智能体实例)
+Image 的运行时实例，可启动/停止。
+
+## 主要功能
+- 创建/更新/删除 Agent Image
+- 创建/更新/删除 Agent Instance
+- 启动/停止 Instance
+"""
+router = APIRouter(prefix="/api/v3", tags=["v3智能体镜像"])
 
 
 # ============================================================
@@ -15,26 +37,28 @@ router = APIRouter(prefix="/api/v3", tags=["v3_images"])
 # ============================================================
 
 class AgentImageCreate(BaseModel):
-    name: str
-    description: str = ""
-    agent_ids: Optional[List[str]] = None  # 选中的智能体ID列表
-    loop_id: Optional[str] = None
-    strategy_id: Optional[str] = None
-    strategy_config: Optional[Dict[str, Any]] = None
-    environment_id: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    """创建智能体镜像请求"""
+    name: str = Field(..., description="镜像名称")
+    description: str = Field(default="", description="镜像描述")
+    agent_ids: Optional[List[str]] = Field(default=None, description="选中的智能体ID列表")
+    loop_id: Optional[str] = Field(default=None, description="循环模式ID")
+    strategy_id: Optional[str] = Field(default=None, description="调度策略ID")
+    strategy_config: Optional[Dict[str, Any]] = Field(default=None, description="策略配置")
+    environment_id: Optional[str] = Field(default=None, description="环境ID")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="元数据")
 
 
 class AgentImageUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    agent_ids: Optional[List[str]] = None
-    loop_id: Optional[Optional[str]] = None
-    strategy_id: Optional[Optional[str]] = None
-    strategy_config: Optional[Dict[str, Any]] = None
-    environment_id: Optional[Optional[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    enabled: Optional[bool] = None
+    """更新智能体镜像请求"""
+    name: Optional[str] = Field(default=None, description="镜像名称")
+    description: Optional[str] = Field(default=None, description="镜像描述")
+    agent_ids: Optional[List[str]] = Field(default=None, description="选中的智能体ID列表")
+    loop_id: Optional[Optional[str]] = Field(default=None, description="循环模式ID")
+    strategy_id: Optional[Optional[str]] = Field(default=None, description="调度策略ID")
+    strategy_config: Optional[Dict[str, Any]] = Field(default=None, description="策略配置")
+    environment_id: Optional[Optional[str]] = Field(default=None, description="环境ID")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="元数据")
+    enabled: Optional[bool] = Field(default=None, description="是否启用")
 
 
 @router.post("/images", response_model=Dict[str, Any])
@@ -98,22 +122,24 @@ async def delete_agent_image(image_id: str):
 # ============================================================
 
 class AgentInstanceCreate(BaseModel):
-    name: str
-    description: str = ""
-    image_id: str
-    model_name: str = ""
-    runtime_config: Optional[Dict[str, Any]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    """创建智能体实例请求"""
+    name: str = Field(..., description="实例名称")
+    description: str = Field(default="", description="实例描述")
+    image_id: str = Field(..., description="所属镜像ID")
+    model_name: str = Field(default="", description="模型名称")
+    runtime_config: Optional[Dict[str, Any]] = Field(default=None, description="运行时配置")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="元数据")
 
 
 class AgentInstanceUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    image_id: Optional[str] = None
-    model_name: Optional[str] = None
-    runtime_config: Optional[Dict[str, Any]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    enabled: Optional[bool] = None
+    """更新智能体实例请求"""
+    name: Optional[str] = Field(default=None, description="实例名称")
+    description: Optional[str] = Field(default=None, description="实例描述")
+    image_id: Optional[str] = Field(default=None, description="所属镜像ID")
+    model_name: Optional[str] = Field(default=None, description="模型名称")
+    runtime_config: Optional[Dict[str, Any]] = Field(default=None, description="运行时配置")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="元数据")
+    enabled: Optional[bool] = Field(default=None, description="是否启用")
 
 
 @router.post("/instances", response_model=Dict[str, Any])

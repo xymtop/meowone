@@ -7,7 +7,28 @@ from fastapi import APIRouter
 
 from app.config import MEOWONE_CONFIG_DIR
 
-router = APIRouter(prefix="/api/meowone", tags=["meowone-config"])
+"""
+# MeowOne 配置 API
+
+只读读取 `.meowone/` 配置目录的文件内容。
+
+## 配置目录结构
+通常位于项目根目录的 `.meowone/` 目录下，包含：
+- 系统配置文件
+- 提示词模板
+- 智能体配置
+- 技能定义等
+
+## 支持的文件格式
+- `.md` - Markdown 文档
+- `.json` - JSON 配置
+- `.yaml` / `.yml` - YAML 配置
+- `.txt` - 文本文件
+
+## 使用场景
+前端设置页面需要展示和编辑配置文件时使用此接口获取原始内容。
+"""
+router = APIRouter(prefix="/api/meowone", tags=["MeowOne配置"])
 
 MAX_FILE_BYTES = 256_000
 

@@ -117,6 +117,13 @@ export const NAV_DATA: NavSection[] = [
     label: "系统设置",
     items: [
       {
+        title: "接口文档",
+        url: "/docs",
+        icon: Icons.FileTextIcon,
+        items: [],
+        openInNewTab: true,
+      },
+      {
         title: "系统日志",
         url: "/meowone/logs",
         icon: Icons.SettingsIcon,

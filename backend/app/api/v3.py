@@ -3,11 +3,36 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.services import v3_service
 
-router = APIRouter(prefix="/api/v3", tags=["v3"])
+"""
+# v3 管理 API
+
+组织、团队、Loop、策略、环境等管理接口。
+
+## 模块说明
+
+### 组织 (Organizations)
+企业/团队组织架构管理，支持层级结构。
+
+### 团队 (Teams)
+智能体团队管理，配置调度策略。
+
+### Loop (循环)
+Agent 执行循环模式，如 react/plan-exec/hierarchical 等。
+
+### 策略 (Strategies)
+任务调度策略，如 direct/round-robin/auction 等。
+
+### 环境 (Environments)
+执行环境配置，支持沙箱隔离。
+
+### 调度 (Dispatch)
+任务调度入口，Phase 2 实现完整功能。
+"""
+router = APIRouter(prefix="/api/v3", tags=["v3管理"])
 
 
 # ============================================================
@@ -15,17 +40,19 @@ router = APIRouter(prefix="/api/v3", tags=["v3"])
 # ============================================================
 
 class OrganizationCreate(BaseModel):
-    name: str
-    description: str = ""
-    parent_org_id: Optional[str] = None
-    settings: Optional[Dict[str, Any]] = None
+    """创建组织请求"""
+    name: str = Field(..., description="组织名称")
+    description: str = Field(default="", description="组织描述")
+    parent_org_id: Optional[str] = Field(default=None, description="父组织ID（用于层级结构）")
+    settings: Optional[Dict[str, Any]] = Field(default=None, description="自定义设置")
 
 
 class OrganizationUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    parent_org_id: Optional[Optional[str]] = None
-    settings: Optional[Dict[str, Any]] = None
+    """更新组织请求"""
+    name: Optional[str] = Field(default=None, description="组织名称")
+    description: Optional[str] = Field(default=None, description="组织描述")
+    parent_org_id: Optional[Optional[str]] = Field(default=None, description="父组织ID")
+    settings: Optional[Dict[str, Any]] = Field(default=None, description="自定义设置")
 
 
 @router.post("/orgs", response_model=Dict[str, Any])
@@ -99,26 +126,29 @@ async def add_org_agent(org_id: str, body: Dict[str, Any]):
 # ============================================================
 
 class TeamCreate(BaseModel):
-    name: str
-    org_id: str
-    description: str = ""
-    parent_team_id: Optional[str] = None
-    leader_agent_id: Optional[str] = None
-    default_strategy: str = "direct"
-    strategy_config: Optional[Dict[str, Any]] = None
+    """创建团队请求"""
+    name: str = Field(..., description="团队名称")
+    org_id: str = Field(..., description="所属组织ID")
+    description: str = Field(default="", description="团队描述")
+    parent_team_id: Optional[str] = Field(default=None, description="父团队ID")
+    leader_agent_id: Optional[str] = Field(default=None, description="团队负责人智能体ID")
+    default_strategy: str = Field(default="direct", description="默认调度策略")
+    strategy_config: Optional[Dict[str, Any]] = Field(default=None, description="策略配置")
 
 
 class TeamUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    leader_agent_id: Optional[Optional[str]] = None
-    default_strategy: Optional[str] = None
-    strategy_config: Optional[Dict[str, Any]] = None
+    """更新团队请求"""
+    name: Optional[str] = Field(default=None, description="团队名称")
+    description: Optional[str] = Field(default=None, description="团队描述")
+    leader_agent_id: Optional[Optional[str]] = Field(default=None, description="团队负责人智能体ID")
+    default_strategy: Optional[str] = Field(default=None, description="默认调度策略")
+    strategy_config: Optional[Dict[str, Any]] = Field(default=None, description="策略配置")
 
 
 class TeamMemberRequest(BaseModel):
-    agent_id: str
-    role: str = "member"
+    """添加团队成员请求"""
+    agent_id: str = Field(..., description="智能体ID")
+    role: str = Field(default="member", description="成员角色（leader/member）")
 
 
 @router.post("/teams", response_model=Dict[str, Any])
@@ -194,17 +224,19 @@ async def remove_team_member(team_id: str, agent_id: str):
 # ============================================================
 
 class LoopCreate(BaseModel):
-    name: str
-    description: str = ""
-    module_path: str
-    config_schema: Optional[Dict[str, Any]] = None
-    is_system: bool = False
+    """创建循环模式请求"""
+    name: str = Field(..., description="循环名称")
+    description: str = Field(default="", description="循环描述")
+    module_path: str = Field(..., description="模块路径（如 app.loops.react）")
+    config_schema: Optional[Dict[str, Any]] = Field(default=None, description="配置Schema")
+    is_system: bool = Field(default=False, description="是否系统内置")
 
 
 class LoopUpdate(BaseModel):
-    description: Optional[str] = None
-    config_schema: Optional[Dict[str, Any]] = None
-    enabled: Optional[bool] = None
+    """更新循环请求"""
+    description: Optional[str] = Field(default=None, description="循环描述")
+    config_schema: Optional[Dict[str, Any]] = Field(default=None, description="配置Schema")
+    enabled: Optional[bool] = Field(default=None, description="是否启用")
 
 
 @router.post("/loops", response_model=Dict[str, Any])
@@ -264,17 +296,19 @@ async def delete_loop(loop_id: str):
 # ============================================================
 
 class StrategyCreate(BaseModel):
-    name: str
-    description: str = ""
-    module_path: str
-    config_schema: Optional[Dict[str, Any]] = None
-    is_system: bool = False
+    """创建策略请求"""
+    name: str = Field(..., description="策略名称")
+    description: str = Field(default="", description="策略描述")
+    module_path: str = Field(..., description="模块路径")
+    config_schema: Optional[Dict[str, Any]] = Field(default=None, description="配置Schema")
+    is_system: bool = Field(default=False, description="是否系统内置")
 
 
 class StrategyUpdate(BaseModel):
-    description: Optional[str] = None
-    config_schema: Optional[Dict[str, Any]] = None
-    enabled: Optional[bool] = None
+    """更新策略请求"""
+    description: Optional[str] = Field(default=None, description="策略描述")
+    config_schema: Optional[Dict[str, Any]] = Field(default=None, description="配置Schema")
+    enabled: Optional[bool] = Field(default=None, description="是否启用")
 
 
 @router.post("/strategies", response_model=Dict[str, Any])
@@ -334,30 +368,32 @@ async def delete_strategy(strategy_id: str):
 # ============================================================
 
 class EnvironmentCreate(BaseModel):
-    name: str
-    description: str = ""
-    sandbox_type: str = "native"
-    sandbox_config: Optional[Dict[str, Any]] = None
-    resource_limits: Optional[Dict[str, Any]] = None
-    allowed_tools: Optional[List[str]] = None
-    denied_tools: Optional[List[str]] = None
-    max_rounds: int = 10
-    timeout_seconds: int = 300
-    api_key: str = ""
+    """创建环境请求"""
+    name: str = Field(..., description="环境名称")
+    description: str = Field(default="", description="环境描述")
+    sandbox_type: str = Field(default="native", description="沙箱类型（native/docker/e2b）")
+    sandbox_config: Optional[Dict[str, Any]] = Field(default=None, description="沙箱配置")
+    resource_limits: Optional[Dict[str, Any]] = Field(default=None, description="资源限制")
+    allowed_tools: Optional[List[str]] = Field(default=None, description="允许的工具列表")
+    denied_tools: Optional[List[str]] = Field(default=None, description="禁止的工具列表")
+    max_rounds: int = Field(default=10, description="最大轮次")
+    timeout_seconds: int = Field(default=300, description="超时时间（秒）")
+    api_key: str = Field(default="", description="API密钥")
 
 
 class EnvironmentUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    sandbox_type: Optional[str] = None
-    sandbox_config: Optional[Dict[str, Any]] = None
-    resource_limits: Optional[Dict[str, Any]] = None
-    allowed_tools: Optional[List[str]] = None
-    denied_tools: Optional[List[str]] = None
-    max_rounds: Optional[int] = None
-    timeout_seconds: Optional[int] = None
-    enabled: Optional[bool] = None
-    api_key: Optional[str] = None
+    """更新环境请求"""
+    name: Optional[str] = Field(default=None, description="环境名称")
+    description: Optional[str] = Field(default=None, description="环境描述")
+    sandbox_type: Optional[str] = Field(default=None, description="沙箱类型")
+    sandbox_config: Optional[Dict[str, Any]] = Field(default=None, description="沙箱配置")
+    resource_limits: Optional[Dict[str, Any]] = Field(default=None, description="资源限制")
+    allowed_tools: Optional[List[str]] = Field(default=None, description="允许的工具列表")
+    denied_tools: Optional[List[str]] = Field(default=None, description="禁止的工具列表")
+    max_rounds: Optional[int] = Field(default=None, description="最大轮次")
+    timeout_seconds: Optional[int] = Field(default=None, description="超时时间")
+    enabled: Optional[bool] = Field(default=None, description="是否启用")
+    api_key: Optional[str] = Field(default=None, description="API密钥")
 
 
 @router.post("/environments", response_model=Dict[str, Any])
@@ -425,13 +461,14 @@ async def delete_environment(env_id: str):
 # ============================================================
 
 class DispatchRequest(BaseModel):
-    task: str
-    target: Optional[Dict[str, Any]] = None
-    strategy: str = "direct"
-    strategy_config: Optional[Dict[str, Any]] = None
-    environment_id: Optional[str] = None
-    loop: Optional[Dict[str, Any]] = None
-    timeout_seconds: int = 300
+    """调度任务请求"""
+    task: str = Field(..., description="任务描述")
+    target: Optional[Dict[str, Any]] = Field(default=None, description="目标配置")
+    strategy: str = Field(default="direct", description="调度策略")
+    strategy_config: Optional[Dict[str, Any]] = Field(default=None, description="策略配置")
+    environment_id: Optional[str] = Field(default=None, description="环境ID")
+    loop: Optional[Dict[str, Any]] = Field(default=None, description="循环配置")
+    timeout_seconds: int = Field(default=300, description="超时时间（秒）")
 
 
 @router.post("/dispatch", response_model=Dict[str, Any])

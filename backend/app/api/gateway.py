@@ -13,7 +13,29 @@ from app.services import log_stream_service
 from app.services import message_service
 from app.services.channel_session_service import resolve_or_create_session
 
-router = APIRouter(prefix="/api/gateway", tags=["gateway"])
+"""
+# 网关 API
+
+作为多渠道接入的统一入口，支持飞书、Web 等渠道的消息处理。
+
+## 主要功能
+- **turn**: 接收外部消息，触发 Agent 处理流程
+- **logs**: 查询网关日志
+
+## 渠道说明
+- `channel_id`: 渠道标识（如 feishu/web/openai 等）
+- `external_thread_id`: 外部系统的会话ID，用于跨系统关联
+
+## SSE 事件类型
+- `thinking` - 正在思考
+- `delta` - 内容增量
+- `card` - 卡片数据
+- `tool_call` - 工具调用
+- `tool_result` - 工具返回
+- `error` - 错误
+- `done` - 完成
+"""
+router = APIRouter(prefix="/api/gateway", tags=["网关"])
 turn_service = runtime_container.turn_service
 
 

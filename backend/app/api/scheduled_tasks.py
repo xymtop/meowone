@@ -7,7 +7,23 @@ from pydantic import BaseModel
 
 from app.services import scheduled_task_service
 
-router = APIRouter(prefix="/api/scheduled-tasks", tags=["scheduled-tasks"])
+"""
+# 定时任务 API
+
+管理周期性执行的任务。
+
+## 主要功能
+- 列出定时任务
+- 创建/更新定时任务
+- 启用/禁用任务
+- 手动触发待执行任务
+
+## 配置参数
+- `interval_seconds`: 执行间隔（秒）
+- `scheduler_mode`: 调度模式
+- `task_tag`: 任务标签
+"""
+router = APIRouter(prefix="/api/scheduled-tasks", tags=["定时任务"])
 
 
 class ScheduledTaskUpsertRequest(BaseModel):

@@ -9,7 +9,25 @@ from pydantic import BaseModel
 
 from app.db.database import get_db
 
-router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+"""
+# 任务管理 API
+
+管理异步任务的生命周期。
+
+## 任务状态
+- `pending`: 等待执行
+- `running`: 执行中
+- `completed`: 已完成
+- `failed`: 失败
+
+## 主要功能
+- 创建任务
+- 更新任务状态
+- 查询任务列表
+- 重试失败任务
+- 获取任务日志
+"""
+router = APIRouter(prefix="/api/tasks", tags=["任务管理"])
 
 
 class TaskCreateRequest(BaseModel):

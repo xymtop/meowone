@@ -10,7 +10,36 @@ from app.agents.dispatcher import agent_dispatcher
 from app.agents.plan_builder import AgentPlanBuilder
 from app.services import agent_service
 
-router = APIRouter(prefix="/api/agent-executions", tags=["agent-executions"])
+"""
+# 智能体执行 API
+
+统一执行内部/外部智能体。
+
+## 主要功能
+- 执行单个智能体任务
+- 支持内部和外部智能体
+- 返回标准化执行结果
+
+## 执行结果格式
+```json
+{
+  "ok": true,
+  "agent_name": "writer",
+  "agent_type": "internal",
+  "output": "...",
+  "duration_ms": 1234,
+  "loop_rounds": 3,
+  "error": null,
+  "execution_id": "uuid"
+}
+```
+
+## 错误码
+- `A2A_UNREACHABLE` - 外部智能体不可达
+- `A2A_TIMEOUT` - 调用超时
+- `A2A_PROTOCOL_ERROR` - 协议错误
+"""
+router = APIRouter(prefix="/api/agent-executions", tags=["智能体执行"])
 
 
 class AgentExecutionRequest(BaseModel):

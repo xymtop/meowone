@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config_loaders import invalidate_config_cache
 from app.services.mcp_service import (
@@ -26,42 +26,61 @@ from app.services.skill_fs import (
     update_skill_file,
 )
 
-router = APIRouter(prefix="/api/capabilities", tags=["capability-management"])
+"""
+# 能力管理 API
+
+管理 MCP 服务和 Agent Skills。
+
+## MCP 服务
+Model Context Protocol 服务，扩展智能体工具能力。
+
+## Agent Skills
+智能体技能库，支持自然语言触发和自动加载。
+
+## 主要功能
+- MCP 服务：增删改查、获取工具列表
+- Skill：增删改查、文件系统管理
+"""
+router = APIRouter(prefix="/api/capabilities", tags=["能力管理"])
 
 
 class McpServerUpsertRequest(BaseModel):
-    name: str
-    command: Optional[str] = None
-    description: str = ""
-    cwd: Optional[str] = None
-    transport: str = "stdio"
-    url: Optional[str] = None
-    auth_type: str = "none"
-    auth_token: Optional[str] = None
-    env_json: str = "{}"
+    """MCP服务创建/更新请求"""
+    name: str = Field(..., description="服务名称")
+    command: Optional[str] = Field(default=None, description="启动命令（stdio模式必填）")
+    description: str = Field(default="", description="服务描述")
+    cwd: Optional[str] = Field(default=None, description="工作目录")
+    transport: str = Field(default="stdio", description="传输类型（stdio/sse/streamable-http）")
+    url: Optional[str] = Field(default=None, description="服务URL（远程模式必填）")
+    auth_type: str = Field(default="none", description="认证类型（none/bearer/custom）")
+    auth_token: Optional[str] = Field(default=None, description="认证令牌")
+    env_json: str = Field(default="{}", description="环境变量JSON")
 
 
 class SkillUpsertRequest(BaseModel):
-    name: str
-    description: str
-    body: str = ""
-    trigger_keywords: List[str] = []
-    category: str = "general"
-    examples: List[str] = []
-    version: str = "1.0.0"
+    """技能创建/更新请求（数据库记录）"""
+    name: str = Field(..., description="技能名称")
+    description: str = Field(..., description="技能描述")
+    body: str = Field(default="", description="技能内容（Markdown）")
+    trigger_keywords: List[str] = Field(default_factory=list, description="触发关键词")
+    category: str = Field(default="general", description="分类")
+    examples: List[str] = Field(default_factory=list, description="使用示例")
+    version: str = Field(default="1.0.0", description="版本号")
 
 
 class SkillCreateRequest(BaseModel):
-    name: str
-    description: str = ""
-    category: str = "general"
-    trigger_keywords: List[str] = []
-    examples: List[str] = []
+    """创建技能请求（文件系统模式）"""
+    name: str = Field(..., description="技能名称")
+    description: str = Field(default="", description="技能描述")
+    category: str = Field(default="general", description="分类")
+    trigger_keywords: List[str] = Field(default_factory=list, description="触发关键词")
+    examples: List[str] = Field(default_factory=list, description="使用示例")
 
 
 class SkillUpdateFileRequest(BaseModel):
-    file_path: str
-    content: str
+    """更新技能文件请求"""
+    file_path: str = Field(..., description="文件路径（相对于技能目录）")
+    content: str = Field(..., description="文件内容")
 
 
 @router.get("/mcp")

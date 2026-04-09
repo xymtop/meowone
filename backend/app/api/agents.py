@@ -7,7 +7,24 @@ from pydantic import BaseModel
 
 from app.services import agent_service
 
-router = APIRouter(prefix="/api/agents", tags=["agents"])
+"""
+# 智能体管理 API
+
+管理内部和外部智能体(Agent)。
+
+## 智能体类型
+- **internal**: 内部智能体，在当前平台运行
+- **external**: 外部智能体，通过A2A协议远程调用
+
+## 主要功能
+- 列出所有智能体
+- 创建/更新内部智能体
+- 创建/更新外部智能体
+- 删除智能体
+- 发现外部智能体（获取Agent Card）
+- 获取智能体详情和配置
+"""
+router = APIRouter(prefix="/api/agents", tags=["智能体管理"])
 
 
 class InternalAgentUpsertRequest(BaseModel):

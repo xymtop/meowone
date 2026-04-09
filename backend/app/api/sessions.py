@@ -4,7 +4,22 @@ from typing import List
 from app.models.session import SessionCreate, SessionUpdate, SessionResponse
 from app.services import session_service
 
-router = APIRouter(prefix="/api/sessions", tags=["sessions"])
+"""
+# 会话管理 API
+
+管理对话会话，包括创建、查询、更新和删除会话。
+
+## 主要功能
+- 创建新会话
+- 查询会话列表
+- 获取会话详情
+- 更新会话信息
+- 删除会话
+
+## 路径说明
+所有会话关联的消息可通过 `/api/sessions/{session_id}/messages` 获取
+"""
+router = APIRouter(prefix="/api/sessions", tags=["会话管理"])
 
 
 @router.post("", response_model=SessionResponse)

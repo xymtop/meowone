@@ -14,7 +14,26 @@ from app.services.model_service import (
     upsert_model,
 )
 
-router = APIRouter(prefix="/api/models", tags=["model-management"])
+"""
+# 模型管理 API
+
+管理 LLM 模型配置，支持多模型切换。
+
+## 主要功能
+- 列出所有模型
+- 添加/更新模型
+- 设置默认模型
+- 删除模型
+
+## 模型提供者
+支持 OpenAI 兼容格式，包括：
+- OpenAI
+- Azure OpenAI
+- Anthropic
+- 本地部署模型
+- 自定义兼容 API
+"""
+router = APIRouter(prefix="/api/models", tags=["模型管理"])
 
 
 class ModelUpsertRequest(BaseModel):

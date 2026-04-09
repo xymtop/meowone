@@ -10,7 +10,27 @@ from pydantic import BaseModel
 
 from app.db.database import get_db
 
-router = APIRouter(prefix="/api/workflows", tags=["workflows"])
+"""
+# 工作流 API
+
+定义和执行多节点工作流。
+
+## 工作流节点
+每个节点代表一个智能体任务，节点之间通过 `depends_on` 定义依赖关系。
+
+## 策略类型
+- `direct`: 直接执行
+- `pipeline`: 流水线顺序执行
+- `parallel`: 并行执行
+- `dag`: 有向无环图（支持复杂依赖）
+
+## 主要功能
+- 创建/更新工作流
+- 列出工作流
+- 执行工作流
+- 查看执行记录
+"""
+router = APIRouter(prefix="/api/workflows", tags=["工作流"])
 
 
 class WorkflowNodeCreate(BaseModel):

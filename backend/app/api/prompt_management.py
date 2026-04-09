@@ -7,7 +7,24 @@ from pydantic import BaseModel
 
 from app.services import prompt_service
 
-router = APIRouter(prefix="/api/prompts", tags=["prompt-management"])
+"""
+# 提示词管理 API
+
+管理 Agent 系统提示词模板。
+
+## 主要功能
+- 列出所有提示词
+- 获取提示词详情
+- 创建/更新提示词
+- 启用/禁用提示词
+- 删除提示词
+
+## 提示词用途
+- 系统提示词模板
+- Agent 角色定义
+- 任务指令模板
+"""
+router = APIRouter(prefix="/api/prompts", tags=["提示词管理"])
 
 
 class PromptUpsertRequest(BaseModel):

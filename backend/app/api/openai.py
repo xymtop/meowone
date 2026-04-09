@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import json
 import time
@@ -19,7 +19,41 @@ from app.sdk.core import (
 from app.services import message_service
 from app.services.channel_session_service import resolve_or_create_session
 
-router = APIRouter(prefix="/v1", tags=["openai"])
+"""
+# OpenAI 兼容 API
+
+提供与 OpenAI Chat Completions API 兼容的接口，支持流式和非流式响应。
+
+## 兼容性说明
+- 兼容 OpenAI Chat Completions 格式
+- 支持 `stream=true` 返回 SSE 流式 chunk
+- 支持扩展参数：`scheduler_mode`, `task_tag`, `max_rounds`, `max_tool_phases`, `timeout_seconds`
+
+## 请求示例
+```json
+{
+  "model": "gpt-4",
+  "messages": [{"role": "user", "content": "你好"}],
+  "stream": true
+}
+```
+
+## 响应格式（非流式）
+```json
+{
+  "id": "chatcmpl-meowone",
+  "object": "chat.completion",
+  "created": 1234567890,
+  "model": "gpt-4",
+  "choices": [{
+    "index": 0,
+    "message": {"role": "assistant", "content": "..."},
+    "finish_reason": "stop"
+  }]
+}
+```
+"""
+router = APIRouter(prefix="/v1", tags=["OpenAI兼容"])
 turn_service = runtime_container.turn_service
 
 
