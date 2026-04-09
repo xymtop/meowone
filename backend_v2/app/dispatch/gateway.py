@@ -220,10 +220,9 @@ async def _resolve_from_instance(
             if sc:
                 config: Dict[str, Any] = sc.get("config_json") or {}
                 config.update(instance_config)
-                strategy_name = await _strategy_name_from_image(
-                    resolved_image_id
-                ) if resolved_image_id else "direct"
-                return strategy_name, config, None, resolved_image_id
+                strategy_name = str(sc.get("strategy_id") or "").strip()
+                if strategy_name:
+                    return strategy_name, config, None, resolved_image_id
 
         # ② 从镜像查默认策略配置
         if resolved_image_id:

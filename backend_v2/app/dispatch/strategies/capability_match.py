@@ -60,18 +60,27 @@ async def capability_match_strategy(ctx: "DispatchContext") -> AsyncIterator[Loo
         return
 
     if len(candidates) == 1:
-        logger.info("capability_match: 只有一个候选智能体 %s，直接调用", candidates[0].name)
         runtime = candidates[0]
     else:
         yield ThinkingEvent(
             step=1,
-            description=f"能力匹配：从 {len(candidates)} 个候选智能体中选择最佳匹配..."
+            description=f"收到任务，正在分析 {len(candidates)} 个可用智能体，找出最擅长这个任务的..."
         )
         match_model: Optional[str] = ctx.strategy_config.get("match_model") or ctx.model
         runtime = await _match_best(ctx.user_message, candidates, match_model)
+        yield ThinkingEvent(
+            step=2,
+            description=f"已锁定 {runtime.name}，正在派出执行任务..."
+        )
 
-    yield ThinkingEvent(step=2, description=f"已匹配到智能体：{runtime.name}，开始执行...")
     logger.info("capability_match → 选中智能体 %s", runtime.name)
+
+    # 截取任务描述用于提示（避免太长）
+    task_preview = ctx.user_message[:60] + ("..." if len(ctx.user_message) > 60 else "")
+    yield ThinkingEvent(
+        step=3,
+        description=f"{runtime.name} 正在执行：{task_preview}",
+    )
 
     call_input = AgentCallInput(
         user_message=ctx.user_message,
@@ -82,6 +91,11 @@ async def capability_match_strategy(ctx: "DispatchContext") -> AsyncIterator[Loo
     )
     async for event in call_agent(runtime, call_input):
         yield event
+
+    yield ThinkingEvent(
+        step=99,
+        description=f"{runtime.name} 已完成任务，正在整理结果...",
+    )
 
 
 async def _match_best(

@@ -23,7 +23,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import Any, AsyncIterator, List, TYPE_CHECKING
+from typing import Any, AsyncIterator, Dict, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.dispatch.context import DispatchContext
@@ -75,13 +75,11 @@ async def team_dispatch_strategy(ctx: "DispatchContext") -> AsyncIterator[LoopEv
         return
 
     member_runtimes = all_members[:max_members]
+    member_names = [getattr(r, "name", f"成员{i+1}") for i, r in enumerate(member_runtimes)]
 
-    yield ThinkingEvent(
-        step=1,
-        description=f"团队 [{team_id}]：正在将任务分解给 {len(member_runtimes)} 个成员..."
-    )
+    # ── 阶段 1：分解任务 ──
+    yield ThinkingEvent(step=1, description=f"团队 [{team_id}] 正在分析任务，准备分配给 {len(member_runtimes)} 位成员...")
 
-    # 分解任务
     subtasks = await _decompose_task(
         task=ctx.user_message,
         num_members=len(member_runtimes),
@@ -89,8 +87,11 @@ async def team_dispatch_strategy(ctx: "DispatchContext") -> AsyncIterator[LoopEv
         model=ctx.model,
     )
 
-    # 执行子任务
+    yield ThinkingEvent(step=2, description=f"任务已分解，准备分配给：{', '.join(member_names)}")
+
+    # ── 阶段 2：执行子任务 ──
     async def _run_member(runtime: Any, subtask: str) -> str:
+        """运行单个成员，返回最终结果字符串"""
         call_input = AgentCallInput(
             user_message=subtask,
             history=ctx.history,
@@ -105,23 +106,74 @@ async def team_dispatch_strategy(ctx: "DispatchContext") -> AsyncIterator[LoopEv
         return "".join(result_parts).strip()
 
     if parallel:
-        yield ThinkingEvent(step=2, description="并行执行团队成员任务...")
-        tasks = [_run_member(r, s) for r, s in zip(member_runtimes, subtasks)]
-        results: List[Any] = await asyncio.gather(*tasks, return_exceptions=True)
+        # ── 并行执行 ──
+        coros = [_run_member(r, s) for r, s in zip(member_runtimes, subtasks)]
+        pending: List[Any] = [asyncio.ensure_future(c) for c in coros]
+        # future → index 映射（asyncio.wait 返回的 future 索引）
+        fut_to_idx: Dict[Any, int] = {id(f): i for i, f in enumerate(pending)}
+
+        if len(member_names) == 1:
+            yield ThinkingEvent(step=3, description=f"{member_names[0]} 正在工作...")
+        else:
+            names_str = "、".join(member_names[:-1]) + f" 和 {member_names[-1]}"
+            yield ThinkingEvent(step=3, description=f"{names_str} 正在并行工作...")
+
+        results: List[Any] = [None] * len(member_runtimes)
+        finished = 0
+        while pending:
+            done_inner, pending = await asyncio.wait(
+                pending, return_when=asyncio.FIRST_COMPLETED
+            )
+            for fut in done_inner:
+                idx = fut_to_idx[id(fut)]
+                results[idx] = fut.result()
+                finished += 1
+                if finished < len(member_runtimes):
+                    done_names = member_names[:finished]
+                    running_name = member_names[finished]
+                    remaining = len(member_runtimes) - finished
+                    done_str = "、".join(done_names)
+                    yield ThinkingEvent(
+                        step=3,
+                        description=f"{done_str} 已完成，{running_name} 等 {remaining} 位成员工作中...",
+                    )
     else:
+        # ── 串行执行 ──
         results = []
-        for idx, (r, subtask) in enumerate(zip(member_runtimes, subtasks), start=2):
-            yield ThinkingEvent(step=idx, description=f"执行成员 {r.name}...")
+        for idx, (r, subtask, name) in enumerate(
+            zip(member_runtimes, subtasks, member_names), start=3
+        ):
+            names_remaining = member_names[idx:]
+            if len(names_remaining) == 1:
+                yield ThinkingEvent(
+                    step=idx, description=f"{name} 正在工作...（{idx-2}/{len(member_runtimes)}）"
+                )
+            else:
+                names_str = "、".join(names_remaining)
+                yield ThinkingEvent(
+                    step=idx,
+                    description=f"{name} 正在工作，其他成员等待中：{names_str}（{idx-2}/{len(member_runtimes)}）",
+                )
             res = await _run_member(r, subtask)
             results.append(res)
+            if idx < len(member_runtimes) + 2:
+                yield ThinkingEvent(
+                    step=idx + 1,
+                    description=f"{name} 已完成，{member_names[idx - 2 + 1]} 接手工作...",
+                )
 
-    # 汇总结果
+    # ── 阶段 3：汇总结果 ──
+    yield ThinkingEvent(
+        step=97, description="正在汇总各位成员的工作结果..."
+    )
+
     summary_parts: List[str] = ["## 团队执行结果\n"]
     for i, (r, result) in enumerate(zip(member_runtimes, results), start=1):
         r_str = str(result) if not isinstance(result, Exception) else f"[错误: {result}]"
-        summary_parts.append(f"**成员 {i}（{r.name}）**：\n{r_str}\n")
+        summary_parts.append(f"**成员 {i}（{member_names[i-1]}）**：\n{r_str}\n")
 
     summary = "\n".join(summary_parts)
+    yield ThinkingEvent(step=98, description="汇总完毕，正在整理最终报告...")
     yield DeltaEvent(message_id=ctx.message_id, content=summary, done=False)
     yield DeltaEvent(message_id=ctx.message_id, content="", done=True)
     yield DoneEvent(message_id=ctx.message_id, loop_rounds=len(member_runtimes), total_duration=0)
