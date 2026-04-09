@@ -75,6 +75,7 @@ function RefreshIcon() {
 type AgentTypeFilter = "" | "internal" | "external";
 
 type AgentCard = {
+  id?: string;
   name: string;
   description?: string;
   agent_type?: string;
@@ -317,6 +318,15 @@ function AgentsContent() {
                     >
                       <TrashIcon />
                     </button>
+                    {a.id && (
+                      <Link
+                        href={`/meowone/chat?agent_id=${encodeURIComponent(a.id)}`}
+                        className="flex items-center justify-center gap-1.5 rounded-lg bg-purple-50 px-3 py-2 text-sm font-medium text-purple-600 transition-colors hover:bg-purple-100"
+                      >
+                        <ChatIcon />
+                        聊天
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>

@@ -964,6 +964,7 @@ type SelectedTarget =
 function ChatContent() {
   const searchParams = useSearchParams();
   const paramInstance = searchParams.get("instance");
+  const paramAgentId = searchParams.get("agent_id");
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState("");
@@ -985,9 +986,7 @@ function ChatContent() {
   // 实例相关状态
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [selectedTarget, setSelectedTarget] = useState<SelectedTarget | null>(
-    paramInstance ? { mode: "instance", id: paramInstance } : null
-  );
+  const [selectedTarget, setSelectedTarget] = useState<SelectedTarget | null>(null);
 
   const loadInstances = useCallback(async () => {
     try {
@@ -1001,11 +1000,14 @@ function ChatContent() {
         if (found) {
           setSelectedTarget({ mode: "instance", id: found.id });
         }
+      } else if (!paramAgentId) {
+        // 默认选第一个实例
+        setSelectedTarget(instList[0] ? { mode: "instance", id: instList[0].id } : null);
       }
     } catch (e) {
       console.error("加载实例失败:", e);
     }
-  }, [paramInstance]);
+  }, [paramInstance, paramAgentId]);
 
   const loadAgents = useCallback(async () => {
     try {
@@ -1017,10 +1019,18 @@ function ChatContent() {
         description: a.description ? String(a.description) : undefined,
       })) as AgentInfo[];
       setAgents(agentList);
+
+      // URL ?agent_id= 支持
+      if (paramAgentId) {
+        const found = agentList.find((ag) => ag.id === paramAgentId);
+        if (found) {
+          setSelectedTarget({ mode: "agent", id: found.id, name: found.name });
+        }
+      }
     } catch (e) {
       console.error("加载智能体失败:", e);
     }
-  }, []);
+  }, [paramAgentId]);
 
   const loadSessions = async () => {
     const list = await meowoneApi.listSessions();
