@@ -57,9 +57,11 @@ type StrategyConfig = {
   id: string;
   name: string;
   description?: string;
+  image_id?: string;
+  image_name?: string;
   strategy_id?: string;
   strategy_name?: string;
-  config_json?: Record<string, unknown>;
+  config?: Record<string, unknown>;
   enabled: boolean;
   created_at?: string;
 };
@@ -114,10 +116,17 @@ export default function StrategyConfigsPage() {
     }
   };
 
-  const getStrategyName = (strategyId?: string) => {
-    if (!strategyId) return "-";
+  const getStrategyName = (strategyId?: string, apiName?: string) => {
+    if (apiName?.trim()) return apiName.trim();
+    if (!strategyId) return "—";
     const s = strategies.find((s) => s.id === strategyId);
-    return s?.name || strategyId;
+    return s?.name ?? "—";
+  };
+
+  const getImageDisplay = (imageName?: string, imageId?: string) => {
+    if (imageName?.trim()) return imageName.trim();
+    if (imageId) return "关联镜像不可用";
+    return "—";
   };
 
   const configs = data?.configs || [];
@@ -128,7 +137,7 @@ export default function StrategyConfigsPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">策略配置管理</h1>
-          <p className="mt-1 text-sm text-gray-500">预配置的策略参数，创建镜像时可快速选择</p>
+          <p className="mt-1 text-sm text-gray-500">预配置的策略参数，基于镜像创建。创建实例时可快速选择</p>
         </div>
         <div className="flex items-center gap-2">
           <Link
@@ -168,6 +177,7 @@ export default function StrategyConfigsPage() {
             <thead className="bg-gray-50 dark:bg-dark">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">名称</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">关联镜像</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">关联策略</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">配置内容</th>
                 <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">状态</th>
@@ -177,7 +187,7 @@ export default function StrategyConfigsPage() {
             <tbody className="divide-y divide-gray-200 dark:divide-dark-3">
               {configs.map((cfg) => {
                 const cfgData = cfg as unknown as StrategyConfig;
-                const configJson = cfgData.config_json || {};
+                const configJson = cfgData.config || {};
                 const configPreview = Object.keys(configJson).length > 0
                   ? JSON.stringify(configJson).slice(0, 50) + "..."
                   : "{}";
@@ -198,7 +208,10 @@ export default function StrategyConfigsPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {getStrategyName(cfgData.strategy_id)}
+                      {getImageDisplay(cfgData.image_name, cfgData.image_id)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {getStrategyName(cfgData.strategy_id, cfgData.strategy_name)}
                     </td>
                     <td className="px-6 py-4 text-xs font-mono text-gray-400">
                       {configPreview}
@@ -259,9 +272,9 @@ export default function StrategyConfigsPage() {
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500 dark:border-dark-3 dark:bg-dark">
         <p className="font-medium text-gray-700 dark:text-gray-300">💡 使用说明</p>
         <ul className="mt-2 space-y-1">
-          <li>• 策略配置是预定义的策略参数组合</li>
-          <li>• 创建镜像时，可以直接选择已配置好的策略配置</li>
-          <li>• 也可以在镜像中自定义策略配置 JSON</li>
+          <li>• 策略配置绑定到镜像，基于镜像的智能体列表</li>
+          <li>• 先创建镜像，再为镜像创建策略配置</li>
+          <li>• 创建实例时，从镜像的策略配置中选择一个</li>
         </ul>
       </div>
     </div>

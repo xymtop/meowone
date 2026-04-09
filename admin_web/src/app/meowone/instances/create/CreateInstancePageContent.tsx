@@ -14,6 +14,13 @@ type ImageItem = {
   environment_id?: string;
 };
 
+type StrategyConfigItem = {
+  id: string;
+  name: string;
+  description?: string;
+  config?: Record<string, unknown>;
+};
+
 type ModelItem = {
   name: string;
   provider?: string;
@@ -35,12 +42,15 @@ export default function CreateInstancePageContent() {
   const [selectedImageId, setSelectedImageId] = useState("");
   const [selectedImage, setSelectedImage] = useState<ImageItem | null>(null);
 
+  // 策略配置
+  const [strategyConfigs, setStrategyConfigs] = useState<StrategyConfigItem[]>([]);
+  const [selectedConfigId, setSelectedConfigId] = useState("");
+
   // 模型
   const [models, setModels] = useState<ModelItem[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
 
   useEffect(() => {
-    // 从 URL 获取预选的镜像 ID
     const params = new URLSearchParams(window.location.search);
     const preSelectedImageId = params.get("image_id") || "";
     setSelectedImageId(preSelectedImageId);
@@ -55,11 +65,11 @@ export default function CreateInstancePageContent() {
       const imageData = await meowoneApi.listAgentImages(true);
       setImages((imageData.images || []) as ImageItem[]);
 
-      // 如果有预选的镜像，自动选中
       if (preSelectedImageId) {
         const img = (imageData.images || []).find((i: any) => i.id === preSelectedImageId);
         if (img) {
           setSelectedImage(img as ImageItem);
+          await loadImageConfigs(preSelectedImageId);
         }
       }
     } catch (e) {
@@ -76,14 +86,25 @@ export default function CreateInstancePageContent() {
     setLoading(false);
   };
 
-  const handleImageSelect = (imageId: string) => {
+  const loadImageConfigs = async (imageId: string) => {
+    try {
+      const configData = await meowoneApi.getImageStrategyConfigs(imageId);
+      setStrategyConfigs((configData.configs || []) as StrategyConfigItem[]);
+    } catch (e) {
+      console.error("加载策略配置失败:", e);
+      setStrategyConfigs([]);
+    }
+  };
+
+  const handleImageSelect = async (imageId: string) => {
     setSelectedImageId(imageId);
+    setSelectedConfigId("");
     const img = images.find((i) => i.id === imageId);
     setSelectedImage(img || null);
-    // 自动设置实例名称
     if (img && !name) {
       setName(img.name + "-实例");
     }
+    await loadImageConfigs(imageId);
   };
 
   const handleSubmit = async () => {
@@ -105,6 +126,7 @@ export default function CreateInstancePageContent() {
         description: description.trim(),
         image_id: selectedImageId,
         model_name: selectedModel,
+        strategy_config_id: selectedConfigId || undefined,
       });
       router.push("/meowone/instances");
     } catch (e) {
@@ -180,7 +202,7 @@ export default function CreateInstancePageContent() {
                 return (
                   <button
                     key={img.id}
-                    onClick={() => handleImageSelect(img.id)}
+                    onClick={() => void handleImageSelect(img.id)}
                     className={`rounded-lg border p-4 text-left transition-all ${
                       isSelected
                         ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
@@ -191,7 +213,7 @@ export default function CreateInstancePageContent() {
                       <input
                         type="radio"
                         checked={isSelected}
-                        onChange={() => handleImageSelect(img.id)}
+                        onChange={() => void handleImageSelect(img.id)}
                         className="mt-1 h-4 w-4"
                       />
                       <div className="min-w-0 flex-1">
@@ -228,6 +250,77 @@ export default function CreateInstancePageContent() {
             </div>
           )}
         </div>
+
+        {/* 策略配置选择 */}
+        {selectedImageId && (
+          <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-dark-3 dark:bg-dark-2">
+            <h2 className="mb-4 text-lg font-semibold flex items-center gap-2">
+              <span className="size-2 rounded-full bg-amber-500"></span>
+              策略配置（可选）
+            </h2>
+            {strategyConfigs.length > 0 ? (
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-gray-300 cursor-pointer hover:bg-gray-50 dark:hover:bg-dark transition-colors">
+                  <input
+                    type="radio"
+                    name="strategyConfig"
+                    checked={selectedConfigId === ""}
+                    onChange={() => setSelectedConfigId("")}
+                    className="h-4 w-4"
+                  />
+                  <div>
+                    <div className="text-sm font-medium">不使用配置</div>
+                    <div className="text-xs text-gray-500">使用策略默认值</div>
+                  </div>
+                </label>
+                {strategyConfigs.map((cfg) => (
+                  <label key={cfg.id} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                    selectedConfigId === cfg.id
+                      ? "border-amber-500 bg-amber-50 dark:bg-amber-900/20"
+                      : "border-gray-200 hover:border-amber-300 hover:bg-gray-50 dark:border-dark-3 dark:hover:bg-dark"
+                  }`}>
+                    <input
+                      type="radio"
+                      name="strategyConfig"
+                      checked={selectedConfigId === cfg.id}
+                      onChange={() => setSelectedConfigId(cfg.id)}
+                      className="mt-1 h-4 w-4"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium">{cfg.name}</div>
+                      {cfg.description && (
+                        <div className="text-xs text-gray-500">{cfg.description}</div>
+                      )}
+                      {cfg.config && Object.keys(cfg.config).length > 0 && (
+                        <pre className="mt-1.5 text-xs font-mono text-gray-400 bg-gray-100 dark:bg-dark p-2 rounded overflow-x-auto max-h-16">
+                          {JSON.stringify(cfg.config).slice(0, 100)}
+                        </pre>
+                      )}
+                    </div>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="size-12 rounded-full bg-amber-100 flex items-center justify-center mb-3">
+                  <svg className="size-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+                  </svg>
+                </div>
+                <p className="text-sm text-gray-500 mb-3">该镜像还没有策略配置</p>
+                <a
+                  href={`/meowone/scheduler/strategy-configs/create?image_id=${selectedImageId}`}
+                  className="inline-flex items-center gap-1 text-sm text-blue-500 hover:text-blue-600"
+                >
+                  <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v15m7.5-7.5h-15" />
+                  </svg>
+                  为这个镜像创建配置
+                </a>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 模型选择 */}
         <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-dark-3 dark:bg-dark-2">

@@ -804,8 +804,9 @@ export const meowoneApi = {
     ),
 
   // 策略配置 CRUD
-  listStrategyConfigs: (params?: { strategy_id?: string; enabled?: boolean }) => {
+  listStrategyConfigs: (params?: { image_id?: string; strategy_id?: string; enabled?: boolean }) => {
     const q = new URLSearchParams();
+    if (params?.image_id) q.set("image_id", params.image_id);
     if (params?.strategy_id) q.set("strategy_id", params.strategy_id);
     if (params?.enabled !== undefined) q.set("enabled", String(params.enabled));
     const query = q.toString() ? `?${q.toString()}` : "";
@@ -816,6 +817,7 @@ export const meowoneApi = {
   createStrategyConfig: (body: {
     name: string;
     description?: string;
+    image_id?: string;
     strategy_id?: string;
     config?: Record<string, unknown>;
   }) => {
@@ -827,6 +829,7 @@ export const meowoneApi = {
   updateStrategyConfig: (configId: string, body: {
     name?: string;
     description?: string;
+    image_id?: string;
     strategy_id?: string;
     config?: Record<string, unknown>;
     enabled?: boolean;
@@ -840,6 +843,10 @@ export const meowoneApi = {
     request<{ ok: boolean; deleted: boolean }>(
       `/api/v3/strategy-configs/${encodeURIComponent(configId)}`,
       { method: "DELETE" },
+    ),
+  getImageStrategyConfigs: (imageId: string) =>
+    request<{ count: number; configs: Record<string, unknown>[] }>(
+      `/api/v3/images/${encodeURIComponent(imageId)}/strategy-configs`,
     ),
 
   listEnvironments: (enabledOnly?: boolean) => {
@@ -914,7 +921,6 @@ export const meowoneApi = {
     agent_ids?: string[];
     loop_id?: string;
     strategy_id?: string;
-    strategy_config?: Record<string, unknown>;
     environment_id?: string;
   }) =>
     request<{ ok: boolean; image: Record<string, unknown> }>("/api/v3/images", {
@@ -929,7 +935,6 @@ export const meowoneApi = {
     agent_ids?: string[];
     loop_id?: string;
     strategy_id?: string;
-    strategy_config?: Record<string, unknown>;
     environment_id?: string;
     enabled?: boolean;
   }) =>
@@ -953,6 +958,8 @@ export const meowoneApi = {
     description?: string;
     image_id: string;
     model_name?: string;
+    strategy_config_id?: string;
+    strategy_config?: Record<string, unknown>;
     runtime_config?: Record<string, unknown>;
   }) =>
     request<{ ok: boolean; instance: Record<string, unknown> }>("/api/v3/instances", {
@@ -966,6 +973,8 @@ export const meowoneApi = {
     description?: string;
     image_id?: string;
     model_name?: string;
+    strategy_config_id?: string;
+    strategy_config?: Record<string, unknown>;
     runtime_config?: Record<string, unknown>;
     enabled?: boolean;
   }) =>

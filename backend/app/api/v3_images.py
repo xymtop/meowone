@@ -43,7 +43,6 @@ class AgentImageCreate(BaseModel):
     agent_ids: Optional[List[str]] = Field(default=None, description="选中的智能体ID列表")
     loop_id: Optional[str] = Field(default=None, description="循环模式ID")
     strategy_id: Optional[str] = Field(default=None, description="调度策略ID")
-    strategy_config: Optional[Dict[str, Any]] = Field(default=None, description="策略配置")
     environment_id: Optional[str] = Field(default=None, description="环境ID")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="元数据")
 
@@ -55,7 +54,6 @@ class AgentImageUpdate(BaseModel):
     agent_ids: Optional[List[str]] = Field(default=None, description="选中的智能体ID列表")
     loop_id: Optional[Optional[str]] = Field(default=None, description="循环模式ID")
     strategy_id: Optional[Optional[str]] = Field(default=None, description="调度策略ID")
-    strategy_config: Optional[Dict[str, Any]] = Field(default=None, description="策略配置")
     environment_id: Optional[Optional[str]] = Field(default=None, description="环境ID")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="元数据")
     enabled: Optional[bool] = Field(default=None, description="是否启用")
@@ -71,7 +69,6 @@ async def create_agent_image(body: AgentImageCreate):
         agent_ids=body.agent_ids,
         loop_id=body.loop_id,
         strategy_id=body.strategy_id,
-        strategy_config=body.strategy_config,
         environment_id=body.environment_id,
         metadata=body.metadata,
     )
@@ -101,7 +98,6 @@ async def update_agent_image(image_id: str, body: AgentImageUpdate):
         agent_ids=body.agent_ids,
         loop_id=body.loop_id,
         strategy_id=body.strategy_id,
-        strategy_config=body.strategy_config,
         environment_id=body.environment_id,
         metadata=body.metadata,
         enabled=body.enabled,
@@ -118,6 +114,18 @@ async def delete_agent_image(image_id: str):
 
 
 # ============================================================
+# Image Strategy Configs API (镜像的策略配置)
+# ============================================================
+
+@router.get("/images/{image_id}/strategy-configs", response_model=Dict[str, Any])
+async def list_image_strategy_configs(image_id: str):
+    """获取指定镜像的所有策略配置"""
+    from app.services import v3_service
+    configs = await v3_service.list_strategy_configs(image_id=image_id)
+    return {"count": len(configs), "configs": configs}
+
+
+# ============================================================
 # Agent Instance API (智能体实例)
 # ============================================================
 
@@ -127,6 +135,8 @@ class AgentInstanceCreate(BaseModel):
     description: str = Field(default="", description="实例描述")
     image_id: str = Field(..., description="所属镜像ID")
     model_name: str = Field(default="", description="模型名称")
+    strategy_config_id: Optional[str] = Field(default=None, description="策略配置ID（从镜像的配置中选择）")
+    strategy_config: Optional[Dict[str, Any]] = Field(default=None, description="自定义策略配置（可选）")
     runtime_config: Optional[Dict[str, Any]] = Field(default=None, description="运行时配置")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="元数据")
 
@@ -137,6 +147,8 @@ class AgentInstanceUpdate(BaseModel):
     description: Optional[str] = Field(default=None, description="实例描述")
     image_id: Optional[str] = Field(default=None, description="所属镜像ID")
     model_name: Optional[str] = Field(default=None, description="模型名称")
+    strategy_config_id: Optional[Optional[str]] = Field(default=None, description="策略配置ID")
+    strategy_config: Optional[Dict[str, Any]] = Field(default=None, description="自定义策略配置")
     runtime_config: Optional[Dict[str, Any]] = Field(default=None, description="运行时配置")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="元数据")
     enabled: Optional[bool] = Field(default=None, description="是否启用")
@@ -156,6 +168,8 @@ async def create_agent_instance(body: AgentInstanceCreate):
         description=body.description.strip(),
         image_id=body.image_id,
         model_name=body.model_name.strip(),
+        strategy_config_id=body.strategy_config_id,
+        strategy_config=body.strategy_config,
         runtime_config=body.runtime_config,
         metadata=body.metadata,
     )
@@ -184,6 +198,8 @@ async def update_agent_instance(instance_id: str, body: AgentInstanceUpdate):
         description=body.description if body.description is not None else None,
         image_id=body.image_id,
         model_name=body.model_name.strip() if body.model_name is not None else None,
+        strategy_config_id=body.strategy_config_id,
+        strategy_config=body.strategy_config,
         runtime_config=body.runtime_config,
         metadata=body.metadata,
         enabled=body.enabled,

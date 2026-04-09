@@ -371,7 +371,8 @@ class StrategyConfigCreate(BaseModel):
     """创建策略配置请求"""
     name: str = Field(..., description="策略配置名称")
     description: str = Field(default="", description="策略配置描述")
-    strategy_id: Optional[str] = Field(default=None, description="关联的策略ID")
+    image_id: Optional[str] = Field(default=None, description="关联的镜像ID")
+    strategy_id: Optional[str] = Field(default=None, description="关联的策略ID（可从镜像继承）")
     config: Optional[Dict[str, Any]] = Field(default=None, description="策略配置参数")
 
 
@@ -379,7 +380,8 @@ class StrategyConfigUpdate(BaseModel):
     """更新策略配置请求"""
     name: Optional[str] = Field(default=None, description="策略配置名称")
     description: Optional[str] = Field(default=None, description="策略配置描述")
-    strategy_id: Optional[str] = Field(default=None, description="关联的策略ID")
+    image_id: Optional[Optional[str]] = Field(default=None, description="关联的镜像ID")
+    strategy_id: Optional[Optional[str]] = Field(default=None, description="关联的策略ID")
     config: Optional[Dict[str, Any]] = Field(default=None, description="策略配置参数")
     enabled: Optional[bool] = Field(default=None, description="是否启用")
 
@@ -391,6 +393,7 @@ async def create_strategy_config(body: StrategyConfigCreate):
     cfg = await v3_service.create_strategy_config(
         name=body.name.strip(),
         description=body.description.strip(),
+        image_id=body.image_id,
         strategy_id=body.strategy_id,
         config=body.config,
     )
@@ -399,10 +402,13 @@ async def create_strategy_config(body: StrategyConfigCreate):
 
 @router.get("/strategy-configs", response_model=Dict[str, Any])
 async def list_strategy_configs(
-    strategy_id: Optional[str] = Query(default=None),
+    image_id: Optional[str] = Query(default=None, description="按镜像ID筛选"),
+    strategy_id: Optional[str] = Query(default=None, description="按策略ID筛选"),
     enabled: Optional[bool] = Query(default=None),
 ):
-    items = await v3_service.list_strategy_configs(strategy_id=strategy_id, enabled=enabled)
+    items = await v3_service.list_strategy_configs(
+        image_id=image_id, strategy_id=strategy_id, enabled=enabled
+    )
     return {"count": len(items), "configs": items}
 
 
@@ -420,6 +426,7 @@ async def update_strategy_config(config_id: str, body: StrategyConfigUpdate):
         config_id,
         name=body.name.strip() if body.name else None,
         description=body.description if body.description is not None else None,
+        image_id=body.image_id,
         strategy_id=body.strategy_id,
         config=body.config,
         enabled=body.enabled,

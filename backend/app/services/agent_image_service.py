@@ -19,7 +19,6 @@ async def create_agent_image(
     agent_ids: Optional[List[str]] = None,
     loop_id: Optional[str] = None,
     strategy_id: Optional[str] = None,
-    strategy_config: Optional[Dict[str, Any]] = None,
     environment_id: Optional[str] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -29,10 +28,10 @@ async def create_agent_image(
             """
             INSERT INTO agent_images (
                 id, name, description, agent_ids_json,
-                loop_id, strategy_id, strategy_config_json, environment_id,
+                loop_id, strategy_id, environment_id,
                 metadata_json, enabled
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
             """,
             (
                 image_id,
@@ -41,7 +40,6 @@ async def create_agent_image(
                 json.dumps(agent_ids or [], ensure_ascii=False),
                 loop_id,
                 strategy_id,
-                json.dumps(strategy_config or {}, ensure_ascii=False),
                 environment_id,
                 json.dumps(metadata or {}, ensure_ascii=False),
             ),
@@ -85,7 +83,6 @@ async def update_agent_image(
     agent_ids: Optional[List[str]] = None,
     loop_id: Optional[Optional[str]] = None,
     strategy_id: Optional[Optional[str]] = None,
-    strategy_config: Optional[Dict[str, Any]] = None,
     environment_id: Optional[Optional[str]] = None,
     metadata: Optional[Dict[str, Any]] = None,
     enabled: Optional[bool] = None,
@@ -112,9 +109,6 @@ async def update_agent_image(
     if strategy_id is not None:
         updates.append("strategy_id = ?")
         params.append(strategy_id)
-    if strategy_config is not None:
-        updates.append("strategy_config_json = ?")
-        params.append(json.dumps(strategy_config, ensure_ascii=False))
     if environment_id is not None:
         updates.append("environment_id = ?")
         params.append(environment_id)
@@ -157,15 +151,13 @@ def _image_to_dict(row: Any) -> Dict[str, Any]:
             data[key] = json.loads(data.get(key) or "[]")
         except Exception:
             data[key] = []
-    for key in ("strategy_config_json", "metadata_json"):
+    for key in ("metadata_json",):
         try:
             data[key] = json.loads(data.get(key) or "{}")
         except Exception:
             data[key] = {}
     data["enabled"] = bool(data.get("enabled"))
-    # 简化字段名
     data["agent_ids"] = data.pop("agent_ids_json", [])
-    data["strategy_config"] = data.pop("strategy_config_json", {})
     return data
 
 
@@ -180,6 +172,8 @@ async def create_agent_instance(
     description: str = "",
     image_id: str,
     model_name: str = "",
+    strategy_config_id: Optional[str] = None,
+    strategy_config: Optional[Dict[str, Any]] = None,
     runtime_config: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -189,9 +183,10 @@ async def create_agent_instance(
             """
             INSERT INTO agent_instances (
                 id, name, description, image_id, model_name,
+                strategy_config_id, strategy_config_json,
                 runtime_config_json, metadata_json, status, enabled
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'stopped', 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', 1)
             """,
             (
                 instance_id,
@@ -199,6 +194,8 @@ async def create_agent_instance(
                 description,
                 image_id,
                 model_name,
+                strategy_config_id,
+                json.dumps(strategy_config or {}, ensure_ascii=False),
                 json.dumps(runtime_config or {}, ensure_ascii=False),
                 json.dumps(metadata or {}, ensure_ascii=False),
             ),
@@ -252,6 +249,8 @@ async def update_agent_instance(
     description: Optional[str] = None,
     image_id: Optional[str] = None,
     model_name: Optional[str] = None,
+    strategy_config_id: Optional[Optional[str]] = None,
+    strategy_config: Optional[Dict[str, Any]] = None,
     runtime_config: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
     enabled: Optional[bool] = None,
@@ -275,6 +274,12 @@ async def update_agent_instance(
     if model_name is not None:
         updates.append("model_name = ?")
         params.append(model_name)
+    if strategy_config_id is not None:
+        updates.append("strategy_config_id = ?")
+        params.append(strategy_config_id)
+    if strategy_config is not None:
+        updates.append("strategy_config_json = ?")
+        params.append(json.dumps(strategy_config, ensure_ascii=False))
     if runtime_config is not None:
         updates.append("runtime_config_json = ?")
         params.append(json.dumps(runtime_config, ensure_ascii=False))
@@ -332,11 +337,12 @@ def _instance_to_dict(row: Any) -> Dict[str, Any]:
     if not row:
         return {}
     data = dict(row)
-    for key in ("runtime_config_json", "metadata_json"):
+    for key in ("strategy_config_json", "runtime_config_json", "metadata_json"):
         try:
             data[key] = json.loads(data.get(key) or "{}")
         except Exception:
             data[key] = {}
     data["enabled"] = bool(data.get("enabled"))
+    data["strategy_config"] = data.pop("strategy_config_json", {})
     data["runtime_config"] = data.pop("runtime_config_json", {})
     return data

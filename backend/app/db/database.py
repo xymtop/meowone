@@ -367,18 +367,6 @@ CREATE TABLE IF NOT EXISTS strategies (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
--- 策略配置表（预配置的策略参数）
-CREATE TABLE IF NOT EXISTS strategy_configs (
-    id TEXT PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL,
-    description TEXT DEFAULT '',
-    strategy_id TEXT REFERENCES strategies(id),
-    config_json TEXT DEFAULT '{}',
-    enabled INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
-);
-
 -- 环境表
 CREATE TABLE IF NOT EXISTS environments (
     id TEXT PRIMARY KEY,
@@ -397,7 +385,7 @@ CREATE TABLE IF NOT EXISTS environments (
 );
 
 -- ============================================================
--- MeowOne v3.1 智能体镜像表
+-- MeowOne v3.1 智能体镜像表（必须放在 strategy_configs 之前，因为 strategy_configs 引用它）
 -- 镜像 = 选中的智能体列表 + 调度策略 + 执行环境
 -- ============================================================
 CREATE TABLE IF NOT EXISTS agent_images (
@@ -409,7 +397,6 @@ CREATE TABLE IF NOT EXISTS agent_images (
     -- 调度配置
     loop_id TEXT REFERENCES loops(id),
     strategy_id TEXT REFERENCES strategies(id),
-    strategy_config_json TEXT DEFAULT '{}',
     environment_id TEXT REFERENCES environments(id),
     -- 元数据
     metadata_json TEXT DEFAULT '{}',
@@ -419,8 +406,27 @@ CREATE TABLE IF NOT EXISTS agent_images (
 );
 
 -- ============================================================
+-- MeowOne v3.1 策略配置表（预配置的策略参数，绑定到镜像）
+-- 注意：必须放在 agent_images 之后，因为引用了 agent_images(id)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS strategy_configs (
+    id TEXT PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    description TEXT DEFAULT '',
+    image_id TEXT REFERENCES agent_images(id),  -- 绑定到镜像
+    strategy_id TEXT REFERENCES strategies(id),
+    config_json TEXT DEFAULT '{}',
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_strategy_configs_image ON strategy_configs (image_id);
+
+-- ============================================================
 -- MeowOne v3.1 智能体实例表
 -- 实例 = 镜像的运行实体，在对话中实际使用
+-- 注意：策略配置可选地覆盖镜像的默认配置
 -- ============================================================
 CREATE TABLE IF NOT EXISTS agent_instances (
     id TEXT PRIMARY KEY,
@@ -429,8 +435,10 @@ CREATE TABLE IF NOT EXISTS agent_instances (
     image_id TEXT NOT NULL REFERENCES agent_images(id),  -- 关联的镜像
     -- 运行时配置（可覆盖镜像配置）
     model_name TEXT DEFAULT '',               -- 使用的模型
-    runtime_config_json TEXT DEFAULT '{}',   -- 运行时配置
-    status TEXT DEFAULT 'stopped',           -- stopped, running
+    strategy_config_id TEXT REFERENCES strategy_configs(id),  -- 策略配置ID（可选）
+    strategy_config_json TEXT DEFAULT '{}',   -- 自定义策略配置（可选）
+    runtime_config_json TEXT DEFAULT '{}',    -- 运行时配置
+    status TEXT DEFAULT 'stopped',            -- stopped, running
     metadata_json TEXT DEFAULT '{}',
     enabled INTEGER DEFAULT 1,
     created_at TEXT DEFAULT (datetime('now')),
@@ -466,6 +474,7 @@ async def init_db() -> None:
         await _migrate_agent_images_table(db)
         await _migrate_agent_instances_table(db)
         await _migrate_environments_table(db)
+        await _migrate_strategy_configs_table(db)
         
         # 初始化 v3 内置记录
         await _seed_v3_system_records(db)
@@ -569,6 +578,15 @@ async def _migrate_environments_table(db: aiosqlite.Connection) -> None:
     cols = {str(r[1]) for r in rows}
     if "api_key" not in cols:
         await db.execute("ALTER TABLE environments ADD COLUMN api_key TEXT DEFAULT ''")
+
+
+async def _migrate_strategy_configs_table(db: aiosqlite.Connection) -> None:
+    """strategy_configs 表迁移：添加缺失的 image_id 列"""
+    cur = await db.execute("PRAGMA table_info(strategy_configs)")
+    rows = await cur.fetchall()
+    cols = {str(r[1]) for r in rows}
+    if "image_id" not in cols:
+        await db.execute("ALTER TABLE strategy_configs ADD COLUMN image_id TEXT")
 
 
 async def _migrate_agent_instances_table(db: aiosqlite.Connection) -> None:

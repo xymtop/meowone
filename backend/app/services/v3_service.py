@@ -459,12 +459,14 @@ def _strategy_to_dict(row: Any) -> Dict[str, Any]:
 
 # ============================================================
 # Strategy Config Service (策略配置)
+# 策略配置绑定到镜像，通过镜像的 strategy_id 关联策略
 # ============================================================
 
 async def create_strategy_config(
     *,
     name: str,
     description: str = "",
+    image_id: Optional[str] = None,
     strategy_id: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -472,28 +474,38 @@ async def create_strategy_config(
     async with get_db() as db:
         await db.execute(
             """
-            INSERT INTO strategy_configs (id, name, description, strategy_id, config_json)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO strategy_configs (id, name, description, image_id, strategy_id, config_json)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (config_id, name, description, strategy_id, json.dumps(config or {}, ensure_ascii=False)),
+            (config_id, name, description, image_id, strategy_id, json.dumps(config or {}, ensure_ascii=False)),
         )
         await db.commit()
     return await get_strategy_config_by_id(config_id)
 
 
 async def list_strategy_configs(
+    image_id: Optional[str] = None,
     strategy_id: Optional[str] = None,
     enabled: Optional[bool] = None,
 ) -> List[Dict[str, Any]]:
-    query = "SELECT * FROM strategy_configs WHERE 1=1"
+    query = """
+    SELECT sc.*, ai.name AS image_name, s.name AS strategy_name
+    FROM strategy_configs sc
+    LEFT JOIN agent_images ai ON sc.image_id = ai.id
+    LEFT JOIN strategies s ON sc.strategy_id = s.id
+    WHERE 1=1
+    """
     params: List[Any] = []
+    if image_id is not None:
+        query += " AND sc.image_id = ?"
+        params.append(image_id)
     if strategy_id is not None:
-        query += " AND strategy_id = ?"
+        query += " AND sc.strategy_id = ?"
         params.append(strategy_id)
     if enabled is not None:
-        query += " AND enabled = ?"
+        query += " AND sc.enabled = ?"
         params.append(1 if enabled else 0)
-    query += " ORDER BY name ASC"
+    query += " ORDER BY sc.name ASC"
     async with get_db() as db:
         cur = await db.execute(query, tuple(params))
         rows = await cur.fetchall()
@@ -502,7 +514,16 @@ async def list_strategy_configs(
 
 async def get_strategy_config_by_id(config_id: str) -> Optional[Dict[str, Any]]:
     async with get_db() as db:
-        cur = await db.execute("SELECT * FROM strategy_configs WHERE id = ? LIMIT 1", (config_id,))
+        cur = await db.execute(
+            """
+            SELECT sc.*, ai.name AS image_name, s.name AS strategy_name
+            FROM strategy_configs sc
+            LEFT JOIN agent_images ai ON sc.image_id = ai.id
+            LEFT JOIN strategies s ON sc.strategy_id = s.id
+            WHERE sc.id = ? LIMIT 1
+            """,
+            (config_id,),
+        )
         row = await cur.fetchone()
     return _strategy_config_to_dict(row) if row else None
 
@@ -512,7 +533,8 @@ async def update_strategy_config(
     *,
     name: Optional[str] = None,
     description: Optional[str] = None,
-    strategy_id: Optional[str] = None,
+    image_id: Optional[Optional[str]] = None,
+    strategy_id: Optional[Optional[str]] = None,
     config: Optional[Dict[str, Any]] = None,
     enabled: Optional[bool] = None,
 ) -> Optional[Dict[str, Any]]:
@@ -527,6 +549,9 @@ async def update_strategy_config(
     if description is not None:
         updates.append("description = ?")
         params.append(description)
+    if image_id is not None:
+        updates.append("image_id = ?")
+        params.append(image_id)
     if strategy_id is not None:
         updates.append("strategy_id = ?")
         params.append(strategy_id)
@@ -561,9 +586,9 @@ def _strategy_config_to_dict(row: Any) -> Dict[str, Any]:
         return {}
     data = dict(row)
     try:
-        data["config_json"] = json.loads(data.get("config_json") or "{}")
+        data["config"] = json.loads(data.get("config_json") or "{}")
     except Exception:
-        data["config_json"] = {}
+        data["config"] = {}
     data["enabled"] = bool(data.get("enabled"))
     return data
 

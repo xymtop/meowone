@@ -23,7 +23,6 @@ type ImageDetail = {
   agent_ids?: string[];
   loop_id?: string;
   strategy_id?: string;
-  strategy_config?: Record<string, unknown>;
   environment_id?: string;
   enabled: boolean;
 };
@@ -50,18 +49,15 @@ export default function EditImagePage() {
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState("");
   const [selectedEnv, setSelectedEnv] = useState("");
-  const [strategyConfigs, setStrategyConfigs] = useState<{id: string; name: string; config_json?: Record<string, unknown>}[]>([]);
-  const [selectedStrategyConfig, setSelectedStrategyConfig] = useState("");
 
   const loadAll = async () => {
     setLoading(true);
     setError("");
 
-    const [imageData, agentData, strategyData, configData, envData] = await Promise.all([
+    const [imageData, agentData, strategyData, envData] = await Promise.all([
       meowoneApi.getAgentImage(imageId).catch(() => null),
       meowoneApi.listAgents().catch(() => ({ agents: [] })),
       meowoneApi.listStrategies().catch(() => ({ strategies: [] })),
-      meowoneApi.listStrategyConfigs().catch(() => ({ configs: [] })),
       meowoneApi.listEnvironments().catch(() => ({ environments: [] })),
     ]);
 
@@ -77,15 +73,6 @@ export default function EditImagePage() {
     setSelectedAgents(image.agent_ids || []);
     setSelectedStrategy(image.strategy_id || "");
     setSelectedEnv(image.environment_id || "");
-    const savedConfig = (image as { strategy_config?: Record<string, unknown> }).strategy_config;
-    // 尝试匹配已有的配置
-    const savedConfigStr = savedConfig ? JSON.stringify(savedConfig) : "";
-    setStrategyConfigs((configData as {configs: {id: string; name: string; config_json?: Record<string, unknown>}[]}).configs || []);
-    // 如果有保存的配置，查找匹配的策略配置
-    const matchedConfig = (configData as {configs: {id: string; name: string; config_json?: Record<string, unknown>}[]}).configs?.find(
-      (c) => c.config_json && JSON.stringify(c.config_json) === savedConfigStr
-    );
-    setSelectedStrategyConfig(matchedConfig?.id || "");
 
     setAgents((agentData as {agents: Agent[]}).agents || []);
     setStrategies((strategyData as {strategies: Strategy[]}).strategies || []);
@@ -119,21 +106,11 @@ export default function EditImagePage() {
     setError("");
 
     try {
-      // 如果选择了预配置的策略配置，使用其 JSON
-      let parsedConfig: Record<string, unknown> | null = null;
-      if (selectedStrategyConfig) {
-        const selected = strategyConfigs.find((c) => c.id === selectedStrategyConfig);
-        if (selected?.config_json) {
-          parsedConfig = selected.config_json;
-        }
-      }
-
       await meowoneApi.updateAgentImage(imageId, {
         name: name.trim(),
         description: description.trim(),
         agent_ids: selectedAgents,
         strategy_id: selectedStrategy || null,
-        strategy_config: parsedConfig,
         environment_id: selectedEnv || null,
       });
       router.push("/meowone/images");
@@ -263,7 +240,7 @@ export default function EditImagePage() {
         </div>
 
         {/* 调度配置 */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* 调度策略 */}
           <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-dark-3 dark:bg-dark-2">
             <h2 className="mb-4 text-lg font-semibold flex items-center gap-2">
@@ -304,87 +281,6 @@ export default function EditImagePage() {
                 </label>
               ))}
             </div>
-          </div>
-
-          {/* 策略配置 */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-dark-3 dark:bg-dark-2">
-            <h2 className="mb-4 text-lg font-semibold flex items-center gap-2">
-              <span className="size-2 rounded-full bg-amber-500"></span>
-              策略配置
-            </h2>
-
-            {selectedStrategy ? (
-              strategyConfigs.length > 0 ? (
-                <div className="space-y-2">
-                  <label className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-gray-300 cursor-pointer hover:bg-gray-50 dark:hover:bg-dark transition-colors">
-                    <input
-                      type="radio"
-                      name="strategyConfig"
-                      checked={selectedStrategyConfig === ""}
-                      onChange={() => setSelectedStrategyConfig("")}
-                      className="h-4 w-4"
-                    />
-                    <div>
-                      <div className="text-sm font-medium">不使用配置</div>
-                      <div className="text-xs text-gray-500">留空，使用策略默认值</div>
-                    </div>
-                  </label>
-                  {strategyConfigs.map((cfg) => (
-                    <label key={cfg.id} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                      selectedStrategyConfig === cfg.id
-                        ? "border-amber-500 bg-amber-50 dark:bg-amber-900/20"
-                        : "border-gray-200 hover:border-amber-300 hover:bg-gray-50 dark:border-dark-3 dark:hover:bg-dark"
-                    }`}>
-                      <input
-                        type="radio"
-                        name="strategyConfig"
-                        checked={selectedStrategyConfig === cfg.id}
-                        onChange={() => setSelectedStrategyConfig(cfg.id)}
-                        className="mt-1 h-4 w-4"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">{cfg.name}</div>
-                        {cfg.config_json && Object.keys(cfg.config_json).length > 0 ? (
-                          <pre className="mt-1.5 text-xs font-mono text-gray-500 bg-gray-100 dark:bg-dark p-2 rounded overflow-x-auto max-h-20">
-                            {JSON.stringify(cfg.config_json, null, 2)}
-                          </pre>
-                        ) : (
-                          <div className="text-xs text-gray-400 mt-1">空配置</div>
-                        )}
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <div className="size-12 rounded-full bg-amber-100 flex items-center justify-center mb-3">
-                    <svg className="size-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
-                    </svg>
-                  </div>
-                  <p className="text-sm text-gray-500 mb-3">还没有策略配置</p>
-                  <a
-                    href="/meowone/scheduler/strategy-configs/create"
-                    className="inline-flex items-center gap-1 text-sm text-blue-500 hover:text-blue-600"
-                  >
-                    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v15m7.5-7.5h-15" />
-                    </svg>
-                    去创建
-                  </a>
-                </div>
-              )
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <div className="size-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-                  <svg className="size-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-                  </svg>
-                </div>
-                <p className="text-sm text-gray-500">请先选择调度策略</p>
-                <p className="text-xs text-gray-400 mt-1">策略配置依赖于选中的调度策略</p>
-              </div>
-            )}
           </div>
 
           {/* 执行环境 */}
