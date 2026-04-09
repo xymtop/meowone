@@ -334,6 +334,18 @@ CREATE TABLE IF NOT EXISTS strategies (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- 策略配置表（预配置的策略参数）
+CREATE TABLE IF NOT EXISTS strategy_configs (
+    id TEXT PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    description TEXT DEFAULT '',
+    strategy_id TEXT REFERENCES strategies(id),
+    config_json TEXT DEFAULT '{}',
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 -- 环境表
 CREATE TABLE IF NOT EXISTS environments (
     id TEXT PRIMARY KEY,

@@ -795,9 +795,50 @@ export const meowoneApi = {
       `/api/v3/strategies/${encodeURIComponent(strategyId)}`,
       { method: "PUT", body: JSON.stringify(body) },
     ),
+  getStrategy: (strategyId: string) =>
+    request<Record<string, unknown>>(`/api/v3/strategies/${encodeURIComponent(strategyId)}`),
   deleteStrategy: (strategyId: string) =>
     request<{ ok: boolean; deleted: boolean }>(
       `/api/v3/strategies/${encodeURIComponent(strategyId)}`,
+      { method: "DELETE" },
+    ),
+
+  // 策略配置 CRUD
+  listStrategyConfigs: (params?: { strategy_id?: string; enabled?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.strategy_id) q.set("strategy_id", params.strategy_id);
+    if (params?.enabled !== undefined) q.set("enabled", String(params.enabled));
+    const query = q.toString() ? `?${q.toString()}` : "";
+    return request<{ count: number; configs: Record<string, unknown>[] }>(`/api/v3/strategy-configs${query}`);
+  },
+  getStrategyConfig: (configId: string) =>
+    request<Record<string, unknown>>(`/api/v3/strategy-configs/${encodeURIComponent(configId)}`),
+  createStrategyConfig: (body: {
+    name: string;
+    description?: string;
+    strategy_id?: string;
+    config?: Record<string, unknown>;
+  }) => {
+    return request<{ ok: boolean; config: Record<string, unknown> }>("/api/v3/strategy-configs", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+  updateStrategyConfig: (configId: string, body: {
+    name?: string;
+    description?: string;
+    strategy_id?: string;
+    config?: Record<string, unknown>;
+    enabled?: boolean;
+  }) => {
+    return request<{ ok: boolean; config: Record<string, unknown> }>(
+      `/api/v3/strategy-configs/${encodeURIComponent(configId)}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    );
+  },
+  deleteStrategyConfig: (configId: string) =>
+    request<{ ok: boolean; deleted: boolean }>(
+      `/api/v3/strategy-configs/${encodeURIComponent(configId)}`,
       { method: "DELETE" },
     ),
 

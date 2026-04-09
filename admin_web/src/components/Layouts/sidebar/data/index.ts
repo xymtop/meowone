@@ -97,7 +97,10 @@ export const NAV_DATA: NavSection[] = [
         title: "调度策略",
         url: "/meowone/scheduler/strategies",
         icon: Icons.RouteIcon,
-        items: [],
+        items: [
+          { title: "策略列表", url: "/meowone/scheduler/strategies" },
+          { title: "策略配置", url: "/meowone/scheduler/strategy-configs" },
+        ],
       },
       {
         title: "执行环境",

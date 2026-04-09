@@ -458,6 +458,117 @@ def _strategy_to_dict(row: Any) -> Dict[str, Any]:
 
 
 # ============================================================
+# Strategy Config Service (策略配置)
+# ============================================================
+
+async def create_strategy_config(
+    *,
+    name: str,
+    description: str = "",
+    strategy_id: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    config_id = str(uuid.uuid4())
+    async with get_db() as db:
+        await db.execute(
+            """
+            INSERT INTO strategy_configs (id, name, description, strategy_id, config_json)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (config_id, name, description, strategy_id, json.dumps(config or {}, ensure_ascii=False)),
+        )
+        await db.commit()
+    return await get_strategy_config_by_id(config_id)
+
+
+async def list_strategy_configs(
+    strategy_id: Optional[str] = None,
+    enabled: Optional[bool] = None,
+) -> List[Dict[str, Any]]:
+    query = "SELECT * FROM strategy_configs WHERE 1=1"
+    params: List[Any] = []
+    if strategy_id is not None:
+        query += " AND strategy_id = ?"
+        params.append(strategy_id)
+    if enabled is not None:
+        query += " AND enabled = ?"
+        params.append(1 if enabled else 0)
+    query += " ORDER BY name ASC"
+    async with get_db() as db:
+        cur = await db.execute(query, tuple(params))
+        rows = await cur.fetchall()
+    return [_strategy_config_to_dict(r) for r in rows]
+
+
+async def get_strategy_config_by_id(config_id: str) -> Optional[Dict[str, Any]]:
+    async with get_db() as db:
+        cur = await db.execute("SELECT * FROM strategy_configs WHERE id = ? LIMIT 1", (config_id,))
+        row = await cur.fetchone()
+    return _strategy_config_to_dict(row) if row else None
+
+
+async def update_strategy_config(
+    config_id: str,
+    *,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    strategy_id: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+    enabled: Optional[bool] = None,
+) -> Optional[Dict[str, Any]]:
+    existing = await get_strategy_config_by_id(config_id)
+    if not existing:
+        return None
+    updates: List[str] = []
+    params: List[Any] = []
+    if name is not None:
+        updates.append("name = ?")
+        params.append(name)
+    if description is not None:
+        updates.append("description = ?")
+        params.append(description)
+    if strategy_id is not None:
+        updates.append("strategy_id = ?")
+        params.append(strategy_id)
+    if config is not None:
+        updates.append("config_json = ?")
+        params.append(json.dumps(config, ensure_ascii=False))
+    if enabled is not None:
+        updates.append("enabled = ?")
+        params.append(1 if enabled else 0)
+    if not updates:
+        return existing
+    updates.append("updated_at = datetime('now')")
+    params.append(config_id)
+    async with get_db() as db:
+        await db.execute(
+            f"UPDATE strategy_configs SET {', '.join(updates)} WHERE id = ?",
+            tuple(params),
+        )
+        await db.commit()
+    return await get_strategy_config_by_id(config_id)
+
+
+async def delete_strategy_config(config_id: str) -> bool:
+    async with get_db() as db:
+        cur = await db.execute("DELETE FROM strategy_configs WHERE id = ?", (config_id,))
+        await db.commit()
+    return (cur.rowcount or 0) > 0
+
+
+def _strategy_config_to_dict(row: Any) -> Dict[str, Any]:
+    if not row:
+        return {}
+    data = dict(row)
+    try:
+        data["config_json"] = json.loads(data.get("config_json") or "{}")
+    except Exception:
+        data["config_json"] = {}
+    data["enabled"] = bool(data.get("enabled"))
+    return data
+
+
+# ============================================================
 # Environment Service
 # ============================================================
 

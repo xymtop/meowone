@@ -364,6 +364,78 @@ async def delete_strategy(strategy_id: str):
 
 
 # ============================================================
+# Strategy Config API (策略配置)
+# ============================================================
+
+class StrategyConfigCreate(BaseModel):
+    """创建策略配置请求"""
+    name: str = Field(..., description="策略配置名称")
+    description: str = Field(default="", description="策略配置描述")
+    strategy_id: Optional[str] = Field(default=None, description="关联的策略ID")
+    config: Optional[Dict[str, Any]] = Field(default=None, description="策略配置参数")
+
+
+class StrategyConfigUpdate(BaseModel):
+    """更新策略配置请求"""
+    name: Optional[str] = Field(default=None, description="策略配置名称")
+    description: Optional[str] = Field(default=None, description="策略配置描述")
+    strategy_id: Optional[str] = Field(default=None, description="关联的策略ID")
+    config: Optional[Dict[str, Any]] = Field(default=None, description="策略配置参数")
+    enabled: Optional[bool] = Field(default=None, description="是否启用")
+
+
+@router.post("/strategy-configs", response_model=Dict[str, Any])
+async def create_strategy_config(body: StrategyConfigCreate):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="name is required")
+    cfg = await v3_service.create_strategy_config(
+        name=body.name.strip(),
+        description=body.description.strip(),
+        strategy_id=body.strategy_id,
+        config=body.config,
+    )
+    return {"ok": True, "config": cfg}
+
+
+@router.get("/strategy-configs", response_model=Dict[str, Any])
+async def list_strategy_configs(
+    strategy_id: Optional[str] = Query(default=None),
+    enabled: Optional[bool] = Query(default=None),
+):
+    items = await v3_service.list_strategy_configs(strategy_id=strategy_id, enabled=enabled)
+    return {"count": len(items), "configs": items}
+
+
+@router.get("/strategy-configs/{config_id}", response_model=Dict[str, Any])
+async def get_strategy_config(config_id: str):
+    cfg = await v3_service.get_strategy_config_by_id(config_id)
+    if not cfg:
+        raise HTTPException(status_code=404, detail="Strategy config not found")
+    return cfg
+
+
+@router.put("/strategy-configs/{config_id}", response_model=Dict[str, Any])
+async def update_strategy_config(config_id: str, body: StrategyConfigUpdate):
+    cfg = await v3_service.update_strategy_config(
+        config_id,
+        name=body.name.strip() if body.name else None,
+        description=body.description if body.description is not None else None,
+        strategy_id=body.strategy_id,
+        config=body.config,
+        enabled=body.enabled,
+    )
+    if not cfg:
+        raise HTTPException(status_code=404, detail="Strategy config not found")
+    return {"ok": True, "config": cfg}
+
+
+@router.delete("/strategy-configs/{config_id}", response_model=Dict[str, Any])
+async def delete_strategy_config(config_id: str):
+    deleted = await v3_service.delete_strategy_config(config_id)
+    return {"ok": True, "deleted": deleted}
+
+
+# ============================================================
 # Environment API
 # ============================================================
 
