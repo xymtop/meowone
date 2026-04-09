@@ -1,3 +1,11 @@
+"""
+OpenAI 兼容 API 数据模型模块
+
+定义 OpenAI Chat Completions 格式的请求和响应：
+- OpenAIChatCompletionsRequest: OpenAI 兼容的聊天请求
+- last_user_content: 从消息列表中提取最后一条用户消息
+"""
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Union
@@ -5,10 +13,9 @@ from pydantic import BaseModel, Field
 
 
 class OpenAIChatCompletionsRequest(BaseModel):
-    """
-    OpenAI Chat Completions 请求格式
+    """OpenAI Chat Completions 请求格式
 
-    兼容 OpenAI API 的请求格式。
+    兼容 OpenAI API 的请求格式，支持流式和非流式响应。
     """
 
     model: Optional[str] = Field(default=None, description="模型名称（如 gpt-4, gpt-3.5-turbo）")
@@ -24,11 +31,18 @@ class OpenAIChatCompletionsRequest(BaseModel):
 
 
 def last_user_content(messages: List[Dict[str, Any]]) -> Union[str, List[Dict[str, Any]]]:
-    """
-    从消息列表中获取最后一条用户消息的内容
+    """从消息列表中获取最后一条用户消息的内容
+
+    遍历消息列表（从后往前），找到第一条 role 为 "user" 的消息并返回其内容。
+    通常用于从对话历史中提取最新用户输入。
+
+    Args:
+        messages: 消息列表，格式为 [{"role": "user/assistant/system", "content": "..."}]
+
+    Returns:
+        最后一条用户消息的内容，如果未找到则返回空字符串
     """
     for m in reversed(messages):
         if m.get("role") == "user":
             return m.get("content") or ""
     return ""
-

@@ -1,3 +1,9 @@
+"""
+LLM 客户端模块
+
+负责与 LLM API 通信，支持流式和非流式调用。
+"""
+
 from __future__ import annotations
 import asyncio
 import httpx
@@ -6,9 +12,13 @@ import uuid
 from typing import AsyncIterator, Optional, List, Dict, Any
 from app.services.model_service import resolve_model_sync
 
+
 def _is_mock_mode(api_key: str) -> bool:
+    """检查是否处于 Mock 模式（用于演示/测试）"""
     return api_key in ("", "sk-mock", "mock")
 
+
+# Mock 响应文本，用于 API 不可用时的演示
 MOCK_RESPONSES = {
     "default": "你好！我是 MeowOne，你的 AI 操作系统助手。我可以通过对话帮你完成各种任务。有什么我可以帮你的吗？",
     "card_demo": None,
@@ -16,6 +26,16 @@ MOCK_RESPONSES = {
 
 
 def _last_user_text_lower(messages: List[Dict[str, Any]]) -> str:
+    """从消息列表中提取最后一条用户消息的文本（小写）
+
+    用于 Mock 模式下的意图识别。
+
+    Args:
+        messages: 消息列表
+
+    Returns:
+        最后一条用户消息的文本（小写）
+    """
     for m in reversed(messages):
         if m.get("role") != "user":
             continue
@@ -23,6 +43,7 @@ def _last_user_text_lower(messages: List[Dict[str, Any]]) -> str:
         if isinstance(c, str):
             return c.lower()
         if isinstance(c, list):
+            # 处理多模态内容
             parts: List[str] = []
             for p in c:
                 if isinstance(p, dict) and p.get("type") == "text":
@@ -35,12 +56,25 @@ async def _mock_stream(
     messages: List[Dict[str, Any]],
     tools: Optional[List[Dict[str, Any]]] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
-    """Mock LLM for demo/testing when API is unavailable."""
+    """Mock LLM 流式响应
+
+    当 API 不可用时，提供模拟响应用于演示和测试。
+    支持识别简单意图并返回相应的卡片数据。
+
+    Args:
+        messages: 消息列表
+        tools: 可用工具列表
+
+    Yields:
+        模拟的流式响应事件
+    """
     user_msg = _last_user_text_lower(messages)
 
+    # 检查是否有工具结果
     has_tool_result = any(m.get("role") == "tool" for m in messages)
 
     if has_tool_result:
+        # 工具执行后的响应
         response = "操作已完成！如果你还需要其他帮助，随时告诉我。"
         for char in response:
             yield {"type": "content_delta", "content": char}
@@ -48,8 +82,10 @@ async def _mock_stream(
         yield {"type": "done"}
         return
 
+    # 根据用户意图生成响应
     if tools and ("卡片" in user_msg or "card" in user_msg or "会议" in user_msg or "表单" in user_msg or "form" in user_msg):
         if "表单" in user_msg or "form" in user_msg or "订" in user_msg:
+            # 订机票表单
             args = json.dumps({
                 "card_type": "form",
                 "title": "✈️ 订机票",
@@ -65,6 +101,7 @@ async def _mock_stream(
             tc_id = f"call_{uuid.uuid4().hex[:8]}"
             yield {"type": "tool_call", "id": tc_id, "name": "card_builder", "arguments": args}
         elif "会议" in user_msg or "安排" in user_msg:
+            # 会议卡片
             args = json.dumps({
                 "card_type": "action",
                 "title": "📅 创建会议",
@@ -83,6 +120,7 @@ async def _mock_stream(
             tc_id = f"call_{uuid.uuid4().hex[:8]}"
             yield {"type": "tool_call", "id": tc_id, "name": "card_builder", "arguments": args}
         else:
+            # 信息卡片
             args = json.dumps({
                 "card_type": "info",
                 "title": "📊 系统信息",
@@ -99,6 +137,7 @@ async def _mock_stream(
         yield {"type": "done"}
         return
 
+    # 默认响应
     response = MOCK_RESPONSES["default"]
     if "介绍" in user_msg or "你好" in user_msg or "hello" in user_msg or "hi" in user_msg:
         response = (
@@ -122,6 +161,7 @@ async def _mock_stream(
             "- 显示一张卡片（信息卡片）"
         )
 
+    # 流式输出
     for char in response:
         yield {"type": "content_delta", "content": char}
         await asyncio.sleep(0.02)
@@ -133,19 +173,32 @@ async def chat_completion_stream(
     tools: Optional[List[Dict[str, Any]]] = None,
     model: Optional[str] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
-    """Stream chat completion from OpenAI-compatible API.
-    Falls back to mock mode when API is unavailable.
+    """流式聊天补全
+
+    从 OpenAI 兼容 API 获取流式响应。
+    当 API 不可用时自动回退到 Mock 模式。
+
+    Args:
+        messages: 消息列表
+        tools: 可用工具列表
+        model: 模型名称（可选）
+
+    Yields:
+        流式响应事件（content_delta、tool_call、done）
     """
+    # 解析模型配置
     model_cfg = resolve_model_sync(model)
     base_url = str(model_cfg.get("base_url") or "").rstrip("/")
     api_key = str(model_cfg.get("api_key") or "")
     model_name = str(model_cfg.get("name") or model or "")
 
+    # Mock 模式检测
     if _is_mock_mode(api_key) or not base_url:
         async for chunk in _mock_stream(messages, tools):
             yield chunk
         return
 
+    # 构建请求
     url = f"{base_url}/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -159,7 +212,7 @@ async def chat_completion_stream(
     }
     if tools:
         payload["tools"] = tools
-        # 允许模型在同一轮 assistant 消息中返回多个 tool_calls（后端用 asyncio 并行执行）
+        # 允许模型在同一轮 assistant 消息中返回多个 tool_calls
         payload["parallel_tool_calls"] = True
 
     try:
@@ -167,6 +220,7 @@ async def chat_completion_stream(
             async with client.stream("POST", url, json=payload, headers=headers) as response:
                 response.raise_for_status()
 
+                # 工具调用缓冲区（用于处理分片的 tool_call）
                 tool_calls_buffer: Dict[str, Dict[str, str]] = {}
 
                 async for line in response.aiter_lines():
@@ -174,6 +228,7 @@ async def chat_completion_stream(
                         continue
                     data_str = line[6:]
                     if data_str.strip() == "[DONE]":
+                        # 流结束时，输出所有累积的工具调用
                         for tc in tool_calls_buffer.values():
                             yield {
                                 "type": "tool_call",
@@ -192,9 +247,11 @@ async def chat_completion_stream(
                     choice = chunk.get("choices", [{}])[0]
                     delta = choice.get("delta", {})
 
+                    # 内容增量
                     if delta.get("content"):
                         yield {"type": "content_delta", "content": delta["content"]}
 
+                    # 工具调用（可能分片到达）
                     if delta.get("tool_calls"):
                         for tc in delta["tool_calls"]:
                             idx = str(tc.get("index", 0))
@@ -211,5 +268,6 @@ async def chat_completion_stream(
                             if tc.get("function", {}).get("arguments"):
                                 tool_calls_buffer[idx]["arguments"] += tc["function"]["arguments"]
     except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+        # 连接失败时回退到 Mock 模式
         async for chunk in _mock_stream(messages, tools):
             yield chunk

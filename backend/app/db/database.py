@@ -1,16 +1,44 @@
+"""
+数据库模块
+
+使用 SQLite 数据库存储应用数据，支持异步操作。
+
+主要表：
+- users: 用户表
+- sessions: 会话表
+- messages: 消息表
+- agents: 智能体表
+- skills: 技能表
+- prompts: 提示词模板表
+- llm_models: LLM 模型表
+- workflows: 工作流表
+- scheduled_tasks: 定时任务表
+- organizations: 组织表（v3）
+- teams: 团队表（v3）
+- loops: Loop 定义表（v3）
+- strategies: 策略定义表（v3）
+- environments: 环境表（v3）
+- agent_images: 智能体镜像表（v3.1）
+- agent_instances: 智能体实例表（v3.1）
+"""
+
 from __future__ import annotations
 import aiosqlite
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 from app.config import DATABASE_PATH
 
+
+# 数据库建表 SQL
 _CREATE_TABLES = """
+-- 用户表
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+-- 会话表
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -22,6 +50,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- 渠道会话映射表
 CREATE TABLE IF NOT EXISTS channel_sessions (
     id TEXT PRIMARY KEY,
     channel_id TEXT NOT NULL,
@@ -33,6 +62,7 @@ CREATE TABLE IF NOT EXISTS channel_sessions (
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
+-- 消息表
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
@@ -45,6 +75,7 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
+-- Loop 日志表
 CREATE TABLE IF NOT EXISTS loop_logs (
     id TEXT PRIMARY KEY,
     session_id TEXT,
@@ -59,6 +90,7 @@ CREATE TABLE IF NOT EXISTS loop_logs (
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
+-- 智能体执行日志表
 CREATE TABLE IF NOT EXISTS agent_execution_logs (
     id TEXT PRIMARY KEY,
     execution_id TEXT NOT NULL,
@@ -70,13 +102,12 @@ CREATE TABLE IF NOT EXISTS agent_execution_logs (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_channel_sessions_session_id
-ON channel_sessions (session_id);
-CREATE INDEX IF NOT EXISTS idx_messages_session_created
-ON messages (session_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_agent_execution_logs_agent_created
-ON agent_execution_logs (agent_name, created_at);
+-- 索引
+CREATE INDEX IF NOT EXISTS idx_channel_sessions_session_id ON channel_sessions (session_id);
+CREATE INDEX IF NOT EXISTS idx_messages_session_created ON messages (session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_execution_logs_agent_created ON agent_execution_logs (agent_name, created_at);
 
+-- MCP 服务器表
 CREATE TABLE IF NOT EXISTS mcp_servers (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
@@ -94,6 +125,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- 技能表
 CREATE TABLE IF NOT EXISTS skills (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
@@ -109,6 +141,7 @@ CREATE TABLE IF NOT EXISTS skills (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- 智能体表
 CREATE TABLE IF NOT EXISTS agents (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -133,6 +166,7 @@ CREATE TABLE IF NOT EXISTS agents (
     UNIQUE(agent_type, name)
 );
 
+-- 定时任务表
 CREATE TABLE IF NOT EXISTS scheduled_tasks (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
@@ -151,9 +185,9 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run
-ON scheduled_tasks (enabled, next_run_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks (enabled, next_run_at);
 
+-- LLM 模型表
 CREATE TABLE IF NOT EXISTS llm_models (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
@@ -167,9 +201,9 @@ CREATE TABLE IF NOT EXISTS llm_models (
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_llm_models_single_default
-ON llm_models(is_default) WHERE is_default = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_llm_models_single_default ON llm_models(is_default) WHERE is_default = 1;
 
+-- 菜单表
 CREATE TABLE IF NOT EXISTS menus (
     id TEXT PRIMARY KEY,
     menu_key TEXT NOT NULL UNIQUE,
@@ -188,9 +222,9 @@ CREATE TABLE IF NOT EXISTS menus (
     CHECK (menu_key <> COALESCE(parent_key, ''))
 );
 
-CREATE INDEX IF NOT EXISTS idx_menus_parent_sort
-ON menus (parent_key, sort);
+CREATE INDEX IF NOT EXISTS idx_menus_parent_sort ON menus (parent_key, sort);
 
+-- 提示词模板表
 CREATE TABLE IF NOT EXISTS prompts (
     id TEXT PRIMARY KEY,
     prompt_key TEXT NOT NULL UNIQUE,
@@ -204,9 +238,9 @@ CREATE TABLE IF NOT EXISTS prompts (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_prompts_enabled
-ON prompts (enabled, prompt_key);
+CREATE INDEX IF NOT EXISTS idx_prompts_enabled ON prompts (enabled, prompt_key);
 
+-- 工作流表
 CREATE TABLE IF NOT EXISTS workflows (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
@@ -221,6 +255,7 @@ CREATE TABLE IF NOT EXISTS workflows (
 
 CREATE INDEX IF NOT EXISTS idx_workflows_name ON workflows (name);
 
+-- 工作流执行表
 CREATE TABLE IF NOT EXISTS workflow_executions (
     id TEXT PRIMARY KEY,
     workflow_id TEXT NOT NULL,
@@ -237,11 +272,10 @@ CREATE TABLE IF NOT EXISTS workflow_executions (
     FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_workflow_executions_workflow
-ON workflow_executions (workflow_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_workflow_executions_status
-ON workflow_executions (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_workflow_executions_workflow ON workflow_executions (workflow_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_workflow_executions_status ON workflow_executions (status, created_at);
 
+-- 任务表
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -280,8 +314,7 @@ CREATE TABLE IF NOT EXISTS organizations (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_organizations_parent
-ON organizations (parent_org_id);
+CREATE INDEX IF NOT EXISTS idx_organizations_parent ON organizations (parent_org_id);
 
 -- 团队表
 CREATE TABLE IF NOT EXISTS teams (
@@ -409,13 +442,23 @@ CREATE INDEX IF NOT EXISTS idx_agent_instances_name ON agent_instances (name);
 CREATE INDEX IF NOT EXISTS idx_agent_instances_image ON agent_instances (image_id);
 """
 
+# 默认用户插入 SQL
 _INSERT_DEFAULT_USER = "INSERT OR IGNORE INTO users (id, username) VALUES ('default', 'user');"
 
 
 async def init_db() -> None:
+    """初始化数据库
+
+    创建所有表结构，运行数据迁移，插入默认数据。
+    """
     async with aiosqlite.connect(DATABASE_PATH) as db:
+        # 启用外键约束
         await db.execute("PRAGMA foreign_keys = ON")
+        
+        # 创建所有表
         await db.executescript(_CREATE_TABLES)
+        
+        # 运行迁移
         await _migrate_agents_table(db)
         await _migrate_mcp_servers_table(db)
         await _migrate_skills_table(db)
@@ -423,12 +466,18 @@ async def init_db() -> None:
         await _migrate_agent_images_table(db)
         await _migrate_agent_instances_table(db)
         await _migrate_environments_table(db)
+        
+        # 初始化 v3 内置记录
         await _seed_v3_system_records(db)
+        
+        # 插入默认用户
         await db.execute(_INSERT_DEFAULT_USER)
+        
         await db.commit()
 
 
 async def _migrate_agents_table(db: aiosqlite.Connection) -> None:
+    """agents 表迁移：添加缺失列"""
     cur = await db.execute("PRAGMA table_info(agents)")
     rows = await cur.fetchall()
     cols = {str(r[1]) for r in rows}
@@ -441,6 +490,7 @@ async def _migrate_agents_table(db: aiosqlite.Connection) -> None:
 
 
 async def _migrate_mcp_servers_table(db: aiosqlite.Connection) -> None:
+    """mcp_servers 表迁移：添加缺失列"""
     cur = await db.execute("PRAGMA table_info(mcp_servers)")
     rows = await cur.fetchall()
     cols = {str(r[1]) for r in rows}
@@ -457,6 +507,7 @@ async def _migrate_mcp_servers_table(db: aiosqlite.Connection) -> None:
 
 
 async def _migrate_skills_table(db: aiosqlite.Connection) -> None:
+    """skills 表迁移：添加缺失列"""
     cur = await db.execute("PRAGMA table_info(skills)")
     rows = await cur.fetchall()
     cols = {str(r[1]) for r in rows}
@@ -471,7 +522,7 @@ async def _migrate_skills_table(db: aiosqlite.Connection) -> None:
 
 
 async def _migrate_v3_tables(db: aiosqlite.Connection) -> None:
-    """v3 新增表的迁移：为 agents 表添加 org_id, loop_id, environment_id, capabilities_json, load, status"""
+    """v3 新增表的迁移：为 agents 表添加新列"""
     cur = await db.execute("PRAGMA table_info(agents)")
     rows = await cur.fetchall()
     cols = {str(r[1]) for r in rows}
@@ -490,7 +541,7 @@ async def _migrate_v3_tables(db: aiosqlite.Connection) -> None:
 
 
 async def _migrate_agent_images_table(db: aiosqlite.Connection) -> None:
-    """agent_images 表的迁移：添加缺失的列"""
+    """agent_images 表迁移"""
     cur = await db.execute("PRAGMA table_info(agent_images)")
     rows = await cur.fetchall()
     cols = {str(r[1]) for r in rows}
@@ -512,7 +563,7 @@ async def _migrate_agent_images_table(db: aiosqlite.Connection) -> None:
 
 
 async def _migrate_environments_table(db: aiosqlite.Connection) -> None:
-    """environments 表的迁移：添加 api_key 字段"""
+    """environments 表迁移"""
     cur = await db.execute("PRAGMA table_info(environments)")
     rows = await cur.fetchall()
     cols = {str(r[1]) for r in rows}
@@ -521,7 +572,7 @@ async def _migrate_environments_table(db: aiosqlite.Connection) -> None:
 
 
 async def _migrate_agent_instances_table(db: aiosqlite.Connection) -> None:
-    """agent_instances 表的迁移：添加缺失的列"""
+    """agent_instances 表迁移"""
     cur = await db.execute("PRAGMA table_info(agent_instances)")
     rows = await cur.fetchall()
     cols = {str(r[1]) for r in rows}
@@ -679,6 +730,15 @@ async def _seed_v3_system_records(db: aiosqlite.Connection) -> None:
 
 @asynccontextmanager
 async def get_db() -> AsyncIterator[aiosqlite.Connection]:
+    """获取数据库连接的上下文管理器
+
+    用法:
+        async with get_db() as db:
+            await db.execute("SELECT * FROM ...")
+
+    Yields:
+        数据库连接
+    """
     db = await aiosqlite.connect(DATABASE_PATH)
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA foreign_keys = ON")

@@ -1,3 +1,18 @@
+"""
+Loop 运行时核心模块
+
+实现智能体循��的核心执行逻辑，支持多种执行模式：
+- react: 标准 ReAct 模式（默认）
+- plan_exec: 计划-执行分离模式
+
+核心流程：
+1. 接收用户消息和上下文
+2. 调用 LLM 生成回复
+3. LLM 可能调用工具
+4. 执行工具并返回结果
+5. 重复步骤 2-4 直到任务完成
+"""
+
 from __future__ import annotations
 import asyncio
 import json
@@ -29,7 +44,7 @@ DEFAULT_LOOP_MODE = "react"
 
 
 def _get_loop_mode(loop_input: LoopRunInput) -> str:
-    """从 LoopRunInput 获取 loop_mode，兜底为默认值。"""
+    """从 LoopRunInput 获取 loop_mode，兜底为默认值"""
     mode = getattr(loop_input, "loop_mode", None) or ""
     if mode not in SUPPORTED_LOOP_MODES:
         return DEFAULT_LOOP_MODE
@@ -37,7 +52,17 @@ def _get_loop_mode(loop_input: LoopRunInput) -> str:
 
 
 async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
-    """标准 ReAct 模式：思考 → 行动 → 观察（同一轮内可并行多工具）。"""
+    """标准 ReAct 模式：思考 → 行动 → 观察
+
+    同一轮内可并行执行多个工具。
+
+    核心流程：
+    1. 生成系统提示和初始上下文
+    2. 调用 LLM 获取回复
+    3. 如果有工具调用，并行执行
+    4. 将工具结果加入上下文
+    5. 重复直到 LLM 返回纯文本
+    """
     message_id = loop_input.message_id or str(uuid.uuid4())
     capabilities = loop_input.capabilities
 
@@ -45,6 +70,7 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
     round_num = 0
     tool_phases = 0
 
+    # 构建系统提示
     system_prompt = build_system_prompt(
         capabilities.to_descriptions(),
         extra_system=loop_input.extra_system,
@@ -52,8 +78,10 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
     context = LoopContext(system_prompt, loop_input.history)
     context.add_user_message(loop_input.user_message)
 
+    # 获取可用工具
     tools = capabilities.to_openai_tools() if capabilities.list_all() else None
 
+    # 解析资源限制
     max_rounds = loop_input.limits.max_rounds if loop_input.limits and loop_input.limits.max_rounds else LOOP_MAX_ROUNDS
     max_tool_phases = (
         loop_input.limits.max_tool_phases
@@ -66,20 +94,24 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
         else LOOP_TIMEOUT_SECONDS
     )
 
+    # 主循环
     while round_num < max_rounds:
         round_num += 1
         elapsed = time.time() - start_time
+        
+        # 检查超时
         if elapsed > timeout_seconds:
             yield ErrorEvent(code="TIMEOUT", message="Loop execution timed out")
             break
 
         if round_num > 1:
-            yield ThinkingEvent(step=round_num, description="Thinking...")
+            yield ThinkingEvent(step=round_num, description="正在思考...")
 
         accumulated_content = ""
         tool_calls: List[Dict[str, Any]] = []
         has_content = False
 
+        # 调用 LLM
         try:
             async for chunk in chat_completion_stream(
                 messages=context.get_messages(),
@@ -102,11 +134,13 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
             yield ErrorEvent(code="LLM_ERROR", message=str(e))
             break
 
+        # 如果只有文本回复，没有工具调用，结束
         if has_content and not tool_calls:
             context.add_assistant_message(accumulated_content)
             yield DeltaEvent(message_id=message_id, content="", done=True)
             break
 
+        # 处理工具调用
         if tool_calls:
             context.add_assistant_tool_calls(
                 [
@@ -121,13 +155,16 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
                 names,
                 len(tool_calls),
             )
+            
+            # 生成思考事件
             desc = (
                 f"并行执行 {len(tool_calls)} 个工具: {', '.join(names)}"
                 if len(tool_calls) > 1
-                else f"Using {names[0]}..."
+                else f"使用 {names[0]}..."
             )
             yield ThinkingEvent(step=round_num, description=desc)
 
+            # 发送工具调用事件
             for tc in tool_calls:
                 try:
                     params = json.loads(tc["arguments"])
@@ -139,6 +176,7 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
                     params=params,
                 )
 
+            # 并行执行所有工具
             async def _execute_one(tc: Dict[str, Any]) -> Dict[str, Any]:
                 tid = tc["id"]
                 name = tc["name"]
@@ -195,6 +233,7 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
 
             outcomes = await asyncio.gather(*[_execute_one(tc) for tc in tool_calls])
 
+            # 处理工具结果
             for out in outcomes:
                 context.add_tool_result(out["tool_call_id"], out["result_str"])
                 payload = out["result"] if out["result"] is not None else out["result_str"]
@@ -205,6 +244,7 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
                     result=payload,
                     success=ok,
                 )
+                # 处理错误
                 if out["error_code"] == "UNKNOWN_CAPABILITY":
                     yield ErrorEvent(
                         code="UNKNOWN_CAPABILITY",
@@ -216,6 +256,7 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
                         message=out["error_message"] or "",
                     )
                 else:
+                    # 检查卡片类型结果
                     res = out["result"]
                     if (
                         isinstance(res, dict)
@@ -224,6 +265,7 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
                     ):
                         yield CardEvent(message_id=message_id, card=res)
 
+            # Mermaid 图表特殊处理
             if (
                 len(outcomes) == 1
                 and outcomes[0].get("error_code") is None
@@ -252,6 +294,7 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
 
         break
 
+    # 发送完成事件
     total_duration = (time.time() - start_time) * 1000
     yield DoneEvent(
         message_id=message_id,
@@ -261,12 +304,17 @@ async def _run_react(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
 
 
 async def _run_plan_exec(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
-    """计划-执行分离模式：先让模型生成结构化计划，再按计划逐步执行。"""
+    """计划-执行分离模式
+
+    先让模型生成结构化计划，再按计划逐步执行。
+    适用于复杂任务，需要先理清思路再行动。
+    """
     message_id = loop_input.message_id or str(uuid.uuid4())
     capabilities = loop_input.capabilities
 
     start_time = time.time()
 
+    # 构建系统提示（添加计划-执行模式说明）
     system_prompt = build_system_prompt(
         capabilities.to_descriptions(),
         extra_system=(
@@ -285,6 +333,7 @@ async def _run_plan_exec(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
 
     tools = capabilities.to_openai_tools() if capabilities.list_all() else None
 
+    # 解析资源限制
     max_rounds = loop_input.limits.max_rounds if loop_input.limits and loop_input.limits.max_rounds else LOOP_MAX_ROUNDS
     max_tool_phases = (
         loop_input.limits.max_tool_phases
@@ -332,7 +381,7 @@ async def _run_plan_exec(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
     else:
         yield ThinkingEvent(step=1, description="计划阶段完成，开始执行...")
 
-    # 第二阶段：执行（构建新上下文，仅包含计划作为 system hint）
+    # 第二阶段：执行
     exec_system_prompt = build_system_prompt(
         capabilities.to_descriptions(),
         extra_system=(
@@ -357,7 +406,7 @@ async def _run_plan_exec(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
             yield ErrorEvent(code="TIMEOUT", message="Loop execution timed out")
             break
 
-        yield ThinkingEvent(step=round_num, description="执行阶段：Thinking...")
+        yield ThinkingEvent(step=round_num, description="执行阶段：正在思考...")
 
         accumulated_content = ""
         tool_calls: List[Dict[str, Any]] = []
@@ -398,11 +447,11 @@ async def _run_plan_exec(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
                 ]
             )
             names = [tc["name"] for tc in tool_calls]
-            logger.info("plan_exec 执行阶段: round=%s tools=%s", round_num, names)
+            logger.info("计划执行模式: round=%s tools=%s", round_num, names)
             desc = (
                 f"执行 {len(tool_calls)} 个工具: {', '.join(names)}"
                 if len(tool_calls) > 1
-                else f"Using {names[0]}..."
+                else f"使用 {names[0]}..."
             )
             yield ThinkingEvent(step=round_num, description=desc)
 
@@ -417,6 +466,7 @@ async def _run_plan_exec(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
                     params=params,
                 )
 
+            # 并行执行工具
             async def _execute_one(tc: Dict[str, Any]) -> Dict[str, Any]:
                 tid = tc["id"]
                 name = tc["name"]
@@ -477,6 +527,7 @@ async def _run_plan_exec(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
 
         break
 
+    # 发送完成事件
     total_duration = (time.time() - start_time) * 1000
     yield DoneEvent(
         message_id=message_id,
@@ -488,14 +539,17 @@ async def _run_plan_exec(loop_input: LoopRunInput) -> AsyncIterator[LoopEvent]:
 async def run_loop(
     loop_input: LoopRunInput,
 ) -> AsyncIterator[LoopEvent]:
-    """Agent Loop 核心：支持多种执行模式（loop_mode）。
+    """Agent Loop 核心入口
 
-    支持的 loop_mode:
+    支持多种执行模式（loop_mode）：
     - react      : 标准 ReAct（默认）
     - plan_exec  : 计划-执行分离
-    - critic     : 批评-改进（Todo）
-    - multi_agent: 多智能体辩论（Todo）
-    - hierarchical: 层级式执行（Todo）
+
+    Args:
+        loop_input: 循环运行输入
+
+    Yields:
+        循环事件
     """
     mode = _get_loop_mode(loop_input)
 
