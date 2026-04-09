@@ -198,11 +198,11 @@ class ConversationTurnService:
             merged_deny = list(dict.fromkeys(base_deny + agent_deny)) or None
             effective_filter = CapabilityFilter(allow_names=merged_allow, deny_names=merged_deny)
 
-        # 调度层过滤：主模型只看到调度相关工具，除非智能体显式配置了 allow_tools
-        if agent_cfg:
-            agent_explicit_allow = bool(allow_tools)
-            if not agent_explicit_allow:
-                # 主模型默认只能使用调度层工具（子智能体由 invoke_internal_agent 分发）
+        # 调度层过滤：主模型只看到调度相关工具（用于多智能体协作场景）
+        # 只有当用户没有选择特定智能体时，才应用调度限制
+        if agent_cfg is None:
+            # 无指定智能体：主模型默认只能使用调度层工具
+            if effective_filter:
                 dispatch_deny = []
                 for name in (effective_filter.allow_names or []):
                     if name not in DISPATCH_TOOL_NAMES and not name.startswith(REMOTE_AGENT_TOOL_PREFIX):

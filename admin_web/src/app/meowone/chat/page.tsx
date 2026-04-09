@@ -10,6 +10,7 @@ import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import { meowoneApi, type ChatEvent, type Message, type Session } from "@/lib/meowone-api";
 import { cn } from "@/lib/utils";
+import { MentionPicker, type AgentItem } from "@/components/Chat/MentionPicker";
 
 type Segment = { type: "markdown" | "a2ui" | "mermaid"; value: string };
 type StreamingTool = { toolCallId: string; name: string; status: "running" | "ok" | "error" };
@@ -682,33 +683,43 @@ function ServerIcon() {
 }
 
 // ============ 实例选择器组件 ============
+type SelectedTarget =
+  | { mode: "instance"; id: string }
+  | { mode: "agent"; id: string; name: string };
+
 function InstanceSelector({
   instances,
-  selectedInstanceId,
+  agents,
+  selectedTarget,
   onSelect,
   onCreateNew,
   onManageAll,
 }: {
   instances: { id: string; name: string; description?: string; status?: string }[];
-  selectedInstanceId: string;
-  onSelect: (id: string) => void;
+  agents: { id: string; name: string; agent_type: string; description?: string }[];
+  selectedTarget: SelectedTarget | null;
+  onSelect: (target: SelectedTarget) => void;
   onCreateNew: () => void;
   onManageAll?: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [modeTab, setModeTab] = useState<"instance" | "agent">("instance");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const getDisplayName = () => {
-    if (!selectedInstanceId) return "选择实例";
-    const currentInstance = instances.find((i) => i.id === selectedInstanceId);
+    if (!selectedTarget) return "选择实例";
+    if (selectedTarget.mode === "agent") return selectedTarget.name;
+    const currentInstance = instances.find((i) => i.id === selectedTarget.id);
     return currentInstance?.name || "选择实例";
   };
 
   const getInstanceStatus = () => {
-    if (!selectedInstanceId) return null;
-    const currentInstance = instances.find((i) => i.id === selectedInstanceId);
+    if (!selectedTarget || selectedTarget.mode !== "instance") return null;
+    const currentInstance = instances.find((i) => i.id === selectedTarget.id);
     return currentInstance?.status;
   };
+
+  const isAgentMode = selectedTarget?.mode === "agent";
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -723,6 +734,9 @@ function InstanceSelector({
   const runningInstances = instances.filter((i) => i.status === "running");
   const stoppedInstances = instances.filter((i) => i.status !== "running");
 
+  const internalAgents = agents.filter((a) => a.agent_type === "internal");
+  const externalAgents = agents.filter((a) => a.agent_type === "external");
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
@@ -732,81 +746,168 @@ function InstanceSelector({
       >
         <ServerIcon />
         <span className="font-medium">{getDisplayName()}</span>
-        {getInstanceStatus() === "running" && (
+        {isAgentMode ? (
+          <span className="rounded bg-blue-100 px-1.5 py-0.5 text-xs text-blue-600">Agent</span>
+        ) : getInstanceStatus() === "running" ? (
           <span className="h-2 w-2 rounded-full bg-green-500" />
-        )}
+        ) : null}
         <ChevronDownIcon />
       </button>
 
       {isOpen && (
         <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-xl border border-gray-200 bg-white shadow-lg">
+          <div className="flex border-b border-gray-100">
+            <button
+              onClick={() => setModeTab("instance")}
+              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                modeTab === "instance" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"
+              }`}
+            >
+              实例
+            </button>
+            <button
+              onClick={() => setModeTab("agent")}
+              className={`flex-1 px-3 py-2 text-sm font-medium transition-colors ${
+                modeTab === "agent" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"
+              }`}
+            >
+              智能体
+            </button>
+          </div>
           <div className="max-h-80 overflow-y-auto p-1">
-            {runningInstances.length > 0 && (
+            {modeTab === "instance" ? (
               <>
-                <div className="px-3 py-1 text-xs font-medium text-gray-400">运行中</div>
-                {runningInstances.map((inst) => (
-                  <button
-                    key={inst.id}
-                    onClick={() => {
-                      onSelect(inst.id);
-                      setIsOpen(false);
-                    }}
-                    className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
-                      inst.id === selectedInstanceId
-                        ? "bg-blue-50 text-blue-600"
-                        : "hover:bg-gray-50"
-                    }`}
-                  >
-                    <ServerIcon />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate font-medium">{inst.name}</p>
-                        <span className="h-2 w-2 rounded-full bg-green-500" />
-                      </div>
-                      <p className="truncate text-xs text-gray-500">{inst.description || "暂无描述"}</p>
-                    </div>
-                    {inst.id === selectedInstanceId && (
-                      <span className="size-2 shrink-0 rounded-full bg-blue-500" />
-                    )}
-                  </button>
-                ))}
-              </>
-            )}
+                {runningInstances.length > 0 && (
+                  <>
+                    <div className="px-3 py-1 text-xs font-medium text-gray-400">运行中</div>
+                    {runningInstances.map((inst) => (
+                      <button
+                        key={inst.id}
+                        onClick={() => {
+                          onSelect({ mode: "instance", id: inst.id });
+                          setIsOpen(false);
+                        }}
+                        className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
+                          selectedTarget?.mode === "instance" && selectedTarget.id === inst.id
+                            ? "bg-blue-50 text-blue-600"
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <ServerIcon />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate font-medium">{inst.name}</p>
+                            <span className="h-2 w-2 rounded-full bg-green-500" />
+                          </div>
+                          <p className="truncate text-xs text-gray-500">{inst.description || "暂无描述"}</p>
+                        </div>
+                        {selectedTarget?.mode === "instance" && selectedTarget.id === inst.id && (
+                          <span className="size-2 shrink-0 rounded-full bg-blue-500" />
+                        )}
+                      </button>
+                    ))}
+                  </>
+                )}
 
-            {stoppedInstances.length > 0 && (
+                {stoppedInstances.length > 0 && (
+                  <>
+                    <div className="my-2 border-t border-gray-100" />
+                    <div className="px-3 py-1 text-xs font-medium text-gray-400">已停止</div>
+                    {stoppedInstances.map((inst) => (
+                      <button
+                        key={inst.id}
+                        onClick={() => {
+                          onSelect({ mode: "instance", id: inst.id });
+                          setIsOpen(false);
+                        }}
+                        className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
+                          selectedTarget?.mode === "instance" && selectedTarget.id === inst.id
+                            ? "bg-blue-50 text-blue-600"
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <ServerIcon />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">{inst.name}</p>
+                          <p className="truncate text-xs text-gray-500">{inst.description || "暂无描述"}</p>
+                        </div>
+                        {selectedTarget?.mode === "instance" && selectedTarget.id === inst.id && (
+                          <span className="size-2 shrink-0 rounded-full bg-blue-500" />
+                        )}
+                      </button>
+                    ))}
+                  </>
+                )}
+
+                {instances.length === 0 && (
+                  <div className="p-4 text-center text-sm text-gray-500">还没有实例</div>
+                )}
+              </>
+            ) : (
               <>
-                <div className="my-2 border-t border-gray-100" />
-                <div className="px-3 py-1 text-xs font-medium text-gray-400">已停止</div>
-                {stoppedInstances.map((inst) => (
-                  <button
-                    key={inst.id}
-                    onClick={() => {
-                      onSelect(inst.id);
-                      setIsOpen(false);
-                    }}
-                    className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
-                      inst.id === selectedInstanceId
-                        ? "bg-blue-50 text-blue-600"
-                        : "hover:bg-gray-50"
-                    }`}
-                  >
-                    <ServerIcon />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium">{inst.name}</p>
-                      <p className="truncate text-xs text-gray-500">{inst.description || "暂无描述"}</p>
-                    </div>
-                    {inst.id === selectedInstanceId && (
-                      <span className="size-2 shrink-0 rounded-full bg-blue-500" />
-                    )}
-                  </button>
-                ))}
-              </>
-            )}
+                {internalAgents.length > 0 && (
+                  <>
+                    <div className="px-3 py-1 text-xs font-medium text-gray-400">Internal</div>
+                    {internalAgents.map((agent) => (
+                      <button
+                        key={agent.id}
+                        onClick={() => {
+                          onSelect({ mode: "agent", id: agent.id, name: agent.name });
+                          setIsOpen(false);
+                        }}
+                        className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
+                          selectedTarget?.mode === "agent" && selectedTarget.id === agent.id
+                            ? "bg-blue-50 text-blue-600"
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <span className="mt-0.5 text-sm">🤖</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">{agent.name}</p>
+                          <p className="truncate text-xs text-gray-500">{agent.description || "暂无描述"}</p>
+                        </div>
+                        {selectedTarget?.mode === "agent" && selectedTarget.id === agent.id && (
+                          <span className="size-2 shrink-0 rounded-full bg-blue-500" />
+                        )}
+                      </button>
+                    ))}
+                  </>
+                )}
 
-            {instances.length === 0 && (
-              <div className="p-4 text-center text-sm text-gray-500">
-                还没有实例
-              </div>
+                {externalAgents.length > 0 && (
+                  <>
+                    <div className="my-2 border-t border-gray-100" />
+                    <div className="px-3 py-1 text-xs font-medium text-gray-400">External</div>
+                    {externalAgents.map((agent) => (
+                      <button
+                        key={agent.id}
+                        onClick={() => {
+                          onSelect({ mode: "agent", id: agent.id, name: agent.name });
+                          setIsOpen(false);
+                        }}
+                        className={`flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors ${
+                          selectedTarget?.mode === "agent" && selectedTarget.id === agent.id
+                            ? "bg-blue-50 text-blue-600"
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <span className="mt-0.5 text-sm">🌐</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium">{agent.name}</p>
+                          <p className="truncate text-xs text-gray-500">{agent.description || "暂无描述"}</p>
+                        </div>
+                        {selectedTarget?.mode === "agent" && selectedTarget.id === agent.id && (
+                          <span className="size-2 shrink-0 rounded-full bg-blue-500" />
+                        )}
+                      </button>
+                    ))}
+                  </>
+                )}
+
+                {agents.length === 0 && (
+                  <div className="p-4 text-center text-sm text-gray-500">还没有智能体</div>
+                )}
+              </>
             )}
           </div>
           <div className="border-t border-gray-100 p-1">
@@ -849,6 +950,17 @@ type InstanceInfo = {
   model_name?: string;
 };
 
+type AgentInfo = {
+  id: string;
+  name: string;
+  agent_type: string;
+  description?: string;
+};
+
+type SelectedTarget =
+  | { mode: "instance"; id: string }
+  | { mode: "agent"; id: string; name: string };
+
 function ChatContent() {
   const searchParams = useSearchParams();
   const paramInstance = searchParams.get("instance");
@@ -872,27 +984,43 @@ function ChatContent() {
 
   // 实例相关状态
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string>(paramInstance ? paramInstance : "");
-  const [selectedInstance, setSelectedInstance] = useState<InstanceInfo | null>(null);
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [selectedTarget, setSelectedTarget] = useState<SelectedTarget | null>(
+    paramInstance ? { mode: "instance", id: paramInstance } : null
+  );
 
   const loadInstances = useCallback(async () => {
     try {
       const res = await meowoneApi.listAgentInstances();
       const instList = (res.instances || []) as InstanceInfo[];
       setInstances(instList);
-      
+
       // URL ?instance= 支持
       if (paramInstance) {
         const found = instList.find((i) => i.id === paramInstance);
         if (found) {
-          setSelectedInstanceId(found.id);
-          setSelectedInstance(found);
+          setSelectedTarget({ mode: "instance", id: found.id });
         }
       }
     } catch (e) {
       console.error("加载实例失败:", e);
     }
   }, [paramInstance]);
+
+  const loadAgents = useCallback(async () => {
+    try {
+      const res = await meowoneApi.listAgents();
+      const agentList = (res.agents || []).map((a: Record<string, unknown>) => ({
+        id: String(a.id || a.name),
+        name: String(a.name || ""),
+        agent_type: String(a.agent_type || "internal"),
+        description: a.description ? String(a.description) : undefined,
+      })) as AgentInfo[];
+      setAgents(agentList);
+    } catch (e) {
+      console.error("加载智能体失败:", e);
+    }
+  }, []);
 
   const loadSessions = async () => {
     const list = await meowoneApi.listSessions();
@@ -902,8 +1030,9 @@ function ChatContent() {
 
   useEffect(() => {
     void loadInstances();
+    void loadAgents();
     loadSessions().catch((e: Error) => setError(e.message));
-  }, [loadInstances]);
+  }, [loadInstances, loadAgents]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -961,10 +1090,10 @@ function ChatContent() {
 
   const send = async () => {
     if (!prompt.trim() || loading) return;
-    
-    // 检查是否选择了实例
-    if (!selectedInstanceId) {
-      setError("请先选择一个实例");
+
+    // 检查是否选择了实例或智能体
+    if (!selectedTarget) {
+      setError("请先选择一个实例或智能体");
       return;
     }
 
@@ -997,11 +1126,11 @@ function ChatContent() {
       },
     ]);
     try {
-      await meowoneApi.streamChat(targetSessionId, { 
-        content: text, 
+      await meowoneApi.streamChat(targetSessionId, {
+        content: text,
         channel_id: "web",
-        // 实例对话使用 instance_id
-        agent_id: selectedInstanceId,
+        // 根据 mode 选择 agent_id
+        agent_id: selectedTarget.id,
       }, onStreamEvent, {
         signal: controller.signal,
       });
@@ -1020,7 +1149,7 @@ function ChatContent() {
   };
 
   const handleA2UIAction = async (action: A2UIAction) => {
-    if (!sessionId || loading || !selectedInstanceId) return;
+    if (!sessionId || loading || !selectedTarget) return;
     const controller = new AbortController();
     abortRef.current = controller;
     setStreaming("");
@@ -1032,10 +1161,10 @@ function ChatContent() {
     try {
       await meowoneApi.streamA2UIAction(
         sessionId,
-        { 
-          action: action as unknown as Record<string, unknown>, 
+        {
+          action: action as unknown as Record<string, unknown>,
           channel_id: "web",
-          agent_id: selectedInstanceId,
+          agent_id: selectedTarget.id,
         },
         onStreamEvent,
         { signal: controller.signal },
@@ -1068,9 +1197,13 @@ function ChatContent() {
   };
 
   const currentTitle = sessions.find((s) => s.id === sessionId)?.title || "新对话";
-  const currentInstanceInfo = instances.find((i) => i.id === selectedInstanceId);
-  const currentInstanceName = currentInstanceInfo?.name;
-  const currentInstanceStatus = currentInstanceInfo?.status;
+  const currentTargetInfo = selectedTarget?.mode === "instance"
+    ? instances.find((i) => i.id === selectedTarget.id)
+    : selectedTarget?.mode === "agent"
+      ? agents.find((a) => a.id === selectedTarget.id)
+      : null;
+  const currentTargetName = selectedTarget?.mode === "agent" ? selectedTarget.name : (currentTargetInfo as InstanceInfo | null)?.name;
+  const currentTargetStatus = selectedTarget?.mode === "agent" ? "agent" : (currentTargetInfo as InstanceInfo | null)?.status;
   const hasConversation = messages.length > 0 || Boolean(streaming);
   const suggestionPrompts = [
     "帮我总结一下今天的工作重点",
@@ -1079,11 +1212,13 @@ function ChatContent() {
     "生成一个 A2UI 示例界面",
   ];
 
-  const handleSelectInstance = (id: string) => {
-    setSelectedInstanceId(id);
-    const inst = instances.find((i) => i.id === id);
-    setSelectedInstance(inst || null);
+  const handleSelectTarget = (target: SelectedTarget) => {
+    setSelectedTarget(target);
     setError("");
+  };
+
+  const handleMentionSelect = (agent: { id: string; name: string; agent_type: string }) => {
+    setSelectedTarget({ mode: "agent", id: agent.id, name: agent.name });
   };
 
   return (
@@ -1272,8 +1407,9 @@ function ChatContent() {
             <div className="flex items-center gap-3">
               <InstanceSelector
                 instances={instances}
-                selectedInstanceId={selectedInstanceId}
-                onSelect={handleSelectInstance}
+                agents={agents}
+                selectedTarget={selectedTarget}
+                onSelect={handleSelectTarget}
                 onCreateNew={() => {
                   window.location.href = "/meowone/instances/create";
                 }}
@@ -1281,28 +1417,30 @@ function ChatContent() {
                   window.location.href = "/meowone/instances";
                 }}
               />
-              {currentInstanceInfo && (
+              {currentTargetInfo && (
                 <div className="flex items-center gap-2 text-xs text-[#6b7280]">
                   <span className={`rounded-full px-2 py-0.5 ${
-                    currentInstanceStatus === "running" 
-                      ? "bg-green-100 text-green-600" 
-                      : "bg-gray-100 text-gray-500"
+                    currentTargetStatus === "running"
+                      ? "bg-green-100 text-green-600"
+                      : currentTargetStatus === "agent"
+                        ? "bg-blue-100 text-blue-600"
+                        : "bg-gray-100 text-gray-500"
                   }`}>
-                    {currentInstanceStatus === "running" ? "运行中" : "已停止"}
+                    {currentTargetStatus === "running" ? "运行中" : currentTargetStatus === "agent" ? "智能体" : "已停止"}
                   </span>
-                  {currentInstanceInfo.model_name && (
+                  {selectedTarget?.mode === "instance" && (currentTargetInfo as InstanceInfo).model_name && (
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-600">
-                      {currentInstanceInfo.model_name}
+                      {(currentTargetInfo as InstanceInfo).model_name}
                     </span>
                   )}
                 </div>
               )}
             </div>
             <div className="text-[12px] text-[#6b7280]">
-              {!selectedInstanceId && instances.length > 0 && (
-                <span className="text-amber-600">请选择一个实例开始对话</span>
+              {!selectedTarget && instances.length > 0 && (
+                <span className="text-amber-600">请选择一个实例或智能体开始对话</span>
               )}
-              {!selectedInstanceId && instances.length === 0 && (
+              {!selectedTarget && instances.length === 0 && (
                 <Link href="/meowone/instances/create" className="text-blue-500 hover:underline">
                   创建第一个实例
                 </Link>
@@ -1341,16 +1479,16 @@ function ChatContent() {
                   <ServerIcon />
                 </div>
                 <h2 className="text-[32px] font-semibold tracking-tight text-[#1d2129]">
-                  {currentInstanceName
-                    ? `与 ${currentInstanceName} 对话`
+                  {currentTargetName
+                    ? `与 ${currentTargetName} 对话`
                     : "有什么我能帮你的吗？"}
                 </h2>
                 <p className="mt-3 text-[14px] text-[#86909c]">
-                  {currentInstanceName
-                    ? "开始对话，测试你的实例"
-                    : "请先选择一个实例或创建一个新的"}
+                  {currentTargetName
+                    ? "开始对话，测试你的目标"
+                    : "请先选择一个实例或智能体"}
                 </p>
-                {!currentInstanceName && instances.length === 0 && (
+                {!currentTargetName && instances.length === 0 && (
                   <Link
                     href="/meowone/instances/create"
                     className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 font-medium text-white transition-all hover:from-blue-600 hover:to-purple-700"
@@ -1498,9 +1636,9 @@ function ChatContent() {
                     setPrompt(e.target.value);
                     adjustTextareaHeight();
                   }}
-                  placeholder={currentInstanceName ? "输入消息..." : "选择实例后开始对话"}
+                  placeholder={selectedTarget ? "输入消息... (输入 @ 召唤智能体)" : "选择实例后开始对话"}
                   rows={1}
-                  disabled={!selectedInstanceId}
+                  disabled={!selectedTarget}
                   className="max-h-40 min-h-[48px] w-full resize-none border-0 bg-transparent py-2.5 text-[14px] font-normal leading-6 text-[#1d2129] antialiased outline-none placeholder:text-[#9aa0a6] disabled:cursor-not-allowed disabled:opacity-50"
                   onKeyDown={async (e) => {
                     if (composingRef.current || (e.nativeEvent as KeyboardEvent).isComposing) return;
@@ -1524,7 +1662,7 @@ function ChatContent() {
                   <button
                     type="button"
                     className="mb-0.5 flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 text-white transition-all hover:from-blue-600 hover:to-indigo-600 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={!prompt.trim() || loading || !selectedInstanceId}
+                    disabled={!prompt.trim() || loading || !selectedTarget}
                     onClick={send}
                     aria-label="发送"
                   >
@@ -1532,6 +1670,7 @@ function ChatContent() {
                   </button>
                 )}
               </div>
+              <MentionPicker inputRef={textareaRef} onSelect={handleMentionSelect} />
             </div>
           </div>
         </div>
