@@ -55,14 +55,14 @@ export default function CreateImagePage() {
 
     try {
       const strategyData = await meowoneApi.listStrategies();
-      setStrategies((strategyData as {strategies: Strategy[]}).strategies || []);
+      setStrategies((strategyData.strategies || []) as unknown as Strategy[]);
     } catch (e) {
       console.error("加载策略失败:", e);
     }
 
     try {
       const envData = await meowoneApi.listEnvironments();
-      setEnvironments((envData as {environments: Environment[]}).environments || []);
+      setEnvironments((envData.environments || []) as unknown as Environment[]);
     } catch (e) {
       console.error("加载环境失败:", e);
     }

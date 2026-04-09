@@ -36,16 +36,16 @@ export default function CreateStrategyConfigPage() {
         meowoneApi.listAgents(),
         meowoneApi.listStrategies(),
       ]);
-      setImages((imageData as { images: Image[] }).images || []);
-      setAgents((agentData as { agents: Agent[] }).agents || []);
-      setStrategies((strategyData as { strategies: Strategy[] }).strategies || []);
+      setImages((imageData.images || []) as unknown as Image[]);
+      setAgents((agentData.agents || []) as unknown as Agent[]);
+      setStrategies((strategyData.strategies || []) as unknown as Strategy[]);
       
       // 从 URL 获取预选的镜像 ID
       const params = new URLSearchParams(window.location.search);
       const preSelectedImageId = params.get("image_id") || "";
       if (preSelectedImageId) {
         setSelectedImage(preSelectedImageId);
-        const img = (imageData as { images: Image[] }).images?.find((i) => i.id === preSelectedImageId);
+        const img = (imageData.images as unknown as Image[])?.find((i) => i.id === preSelectedImageId);
         if (img?.strategy_id) {
           setSelectedStrategy(img.strategy_id);
         }

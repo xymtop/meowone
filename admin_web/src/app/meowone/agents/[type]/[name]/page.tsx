@@ -1,9 +1,138 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense, ReactElement } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { meowoneApi } from "@/lib/meowone-api";
+
+// ============ 工具列表 ============
+type ToolEntry = {
+  name: string;
+  desc: string;
+  icon: ReactElement;
+};
+
+const TOOL_LIST: ToolEntry[] = [
+  { name: "bash_tool", desc: "执行 bash 命令", icon: <TerminalIcon /> },
+  { name: "sandbox_tool", desc: "沙盒执行环境", icon: <BoxIcon /> },
+  { name: "read_workspace_file", desc: "读取工作区文件", icon: <FileTextIcon /> },
+  { name: "write_workspace_file", desc: "写入工作区文件", icon: <FileEditIcon /> },
+  { name: "list_workspace_dir", desc: "列出工作区目录", icon: <FolderIcon /> },
+  { name: "list_mcp_tools", desc: "列出 MCP 工具", icon: <ListIcon /> },
+  { name: "call_mcp_tool", desc: "调用 MCP 工具", icon: <PlugIcon /> },
+  { name: "subagent_scheduler", desc: "子智能体调度", icon: <UsersIcon /> },
+  { name: "create_internal_agent", desc: "创建内部智能体", icon: <PlusCircleIcon /> },
+  { name: "list_internal_agents", desc: "列出内部智能体", icon: <RobotIcon /> },
+  { name: "invoke_internal_agent", desc: "调用内部智能体", icon: <PlayIcon /> },
+  { name: "manage_scheduled_tasks", desc: "管理定时任务", icon: <ClockIcon /> },
+  { name: "load_agent_skill", desc: "加载智能体技能", icon: <BookIcon /> },
+  { name: "card_builder", desc: "卡片构建器", icon: <LayoutIcon /> },
+];
+
+// ============ 工具图标组件 ============
+function TerminalIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+    </svg>
+  );
+}
+
+function BoxIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+    </svg>
+  );
+}
+
+function FileTextIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 0V6.75m0 0H4.875c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+    </svg>
+  );
+}
+
+function FileEditIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+    </svg>
+  );
+}
+
+function FolderIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+    </svg>
+  );
+}
+
+function ListIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+    </svg>
+  );
+}
+
+function UsersIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+    </svg>
+  );
+}
+
+function PlusCircleIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function BookIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+    </svg>
+  );
+}
+
+function LayoutIcon() {
+  return (
+    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0112 18m0 0v1.5c0 .621-.504 1.125-1.125 1.125M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+    </svg>
+  );
+}
 
 function ArrowLeftIcon() {
   return (
@@ -69,6 +198,8 @@ type AgentDetail = {
   agent_type: string;
   mcp_servers?: string[];
   agent_skills?: string[];
+  allow_tools?: string[];
+  deny_tools?: string[];
   prompt_key?: string;
   system_prompt?: string;
   model_name?: string;
@@ -89,7 +220,7 @@ function AgentDetailContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"mcp" | "skills" | "prompt" | "model">("mcp");
+  const [activeTab, setActiveTab] = useState<"mcp" | "skills" | "prompt" | "model" | "tools">("mcp");
 
   // 资源数据
   const [models, setModels] = useState<ModelItem[]>([]);
@@ -104,6 +235,8 @@ function AgentDetailContent() {
   const [customPrompt, setCustomPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [useCustomPrompt, setUseCustomPrompt] = useState(false);
+  const [selectedAllowTools, setSelectedAllowTools] = useState<string[]>([]);
+  const [selectedDenyTools, setSelectedDenyTools] = useState<string[]>([]);
 
   const loadData = useCallback(async () => {
     if (!agentType || !agentName) {
@@ -133,6 +266,8 @@ function AgentDetailContent() {
       setSelectedPromptKey(agentData.prompt_key || "");
       setCustomPrompt(agentData.system_prompt || "");
       setSelectedModel(agentData.model_name || "");
+      setSelectedAllowTools(agentData.allow_tools || []);
+      setSelectedDenyTools(agentData.deny_tools || []);
 
       if (agentData.system_prompt && !agentData.prompt_key) {
         setUseCustomPrompt(true);
@@ -183,6 +318,8 @@ function AgentDetailContent() {
           prompt_key: promptKeyToSave || "",
           mcp_servers: selectedMcp,
           agent_skills: selectedSkills,
+          allow_tools: selectedAllowTools,
+          deny_tools: selectedDenyTools,
           model_name: selectedModel,
           enabled: agent.enabled,
         });
@@ -205,6 +342,18 @@ function AgentDetailContent() {
 
   const toggleSkill = (name: string) => {
     setSelectedSkills((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
+  };
+
+  const toggleAllowTool = (name: string) => {
+    setSelectedAllowTools((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
+  };
+
+  const toggleDenyTool = (name: string) => {
+    setSelectedDenyTools((prev) =>
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
     );
   };
@@ -318,6 +467,22 @@ function AgentDetailContent() {
         >
           <BrainIcon />
           模型
+        </button>
+        <button
+          onClick={() => setActiveTab("tools")}
+          className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+            activeTab === "tools"
+              ? "border-b-2 border-blue-500 text-blue-600"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          <ShieldIcon />
+          工具限制
+          {(selectedAllowTools.length > 0 || selectedDenyTools.length > 0) && (
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-600">
+              {(selectedAllowTools.length + selectedDenyTools.length)}
+            </span>
+          )}
         </button>
       </div>
 
@@ -545,6 +710,88 @@ function AgentDetailContent() {
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* 工具限制 */}
+        {activeTab === "tools" && (
+          <div className="space-y-6">
+            {/* 允许的工具（白名单） */}
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium">允许的工具（白名单）</h3>
+                  <p className="mt-1 text-sm text-gray-500">留空表示不限制。如果设置了白名单，则只能使用勾选的这些工具</p>
+                </div>
+                {selectedAllowTools.length > 0 && (
+                  <span className="rounded-full bg-green-100 px-3 py-1 text-sm text-green-700">
+                    已选择 {selectedAllowTools.length} 个
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                {TOOL_LIST.map((tool) => {
+                  const isSelected = selectedAllowTools.includes(tool.name);
+                  return (
+                    <button
+                      key={tool.name}
+                      onClick={() => toggleAllowTool(tool.name)}
+                      className={`flex items-center gap-2 rounded-lg border-2 p-3 text-left transition-all ${
+                        isSelected ? "border-green-500 bg-green-50" : "border-gray-100 bg-gray-50 hover:border-gray-200"
+                      }`}
+                    >
+                      <div className={`rounded p-1 ${isSelected ? "bg-green-500 text-white" : "bg-gray-200 text-gray-600"}`}>
+                        {tool.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-sm font-medium">{tool.name}</p>
+                        <p className="truncate text-xs text-gray-500">{tool.desc}</p>
+                      </div>
+                      {isSelected && <CheckIcon />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 禁止的工具（黑名单） */}
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium">禁止的工具（黑名单）</h3>
+                  <p className="mt-1 text-sm text-gray-500">勾选的工具将被禁用，即使在白名单中也会被排除</p>
+                </div>
+                {selectedDenyTools.length > 0 && (
+                  <span className="rounded-full bg-red-100 px-3 py-1 text-sm text-red-700">
+                    已禁止 {selectedDenyTools.length} 个
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                {TOOL_LIST.map((tool) => {
+                  const isSelected = selectedDenyTools.includes(tool.name);
+                  return (
+                    <button
+                      key={tool.name}
+                      onClick={() => toggleDenyTool(tool.name)}
+                      className={`flex items-center gap-2 rounded-lg border-2 p-3 text-left transition-all ${
+                        isSelected ? "border-red-500 bg-red-50" : "border-gray-100 bg-gray-50 hover:border-gray-200"
+                      }`}
+                    >
+                      <div className={`rounded p-1 ${isSelected ? "bg-red-500 text-white" : "bg-gray-200 text-gray-600"}`}
+                      >
+                        {tool.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-sm font-medium">{tool.name}</p>
+                        <p className="truncate text-xs text-gray-500">{tool.desc}</p>
+                      </div>
+                      {isSelected && <CheckIcon />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
       </div>

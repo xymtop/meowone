@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(for f:*)",
+      "Bash(do)",
+      "Bash(echo \"=== $f ===\")",
+      "Read(//Users/xiaoyemiao/Desktop/meowone/**)",
+      "Bash(done)",
+      "Bash(cp /Users/xiaoyemiao/Desktop/meowone/backend/.env /Users/xiaoyemiao/Desktop/meowone/backend_v2/.env)",
+      "Bash(cp /Users/xiaoyemiao/Desktop/meowone/backend/requirements.txt /Users/xiaoyemiao/Desktop/meowone/backend_v2/requirements.txt)",
+      "Bash(cp /Users/xiaoyemiao/Desktop/meowone/backend/uv.toml /Users/xiaoyemiao/Desktop/meowone/backend_v2/uv.toml)",
+      "Bash(# 直接复制整个 capability 目录（基础层完全复用）\ncp -r /Users/xiaoyemiao/Desktop/meowone/backend/app/capability /Users/xiaoyemiao/Desktop/meowone/backend_v2/app/capability\n\n# 把 capability 中引用 app.services 的地方需要后续修复\n# 先检查有哪些依赖\ngrep -r \"from app\\\\.\" /Users/xiaoyemiao/Desktop/meowone/backend_v2/app/capability --include=\"*.py\" | grep -v \"__pycache__\" | grep -v \"app\\\\.capability\\\\|app\\\\.config\\\\|app\\\\.loop\\\\|app\\\\.llm\" | head -40)"
+    ]
+  }
+}

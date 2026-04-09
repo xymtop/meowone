@@ -83,7 +83,7 @@ export default function StrategyConfigsPage() {
         meowoneApi.listStrategies(),
       ]);
       setData(configData as { count: number; configs: Record<string, unknown>[] });
-      setStrategies((strategyData as { strategies: Strategy[] }).strategies || []);
+      setStrategies((strategyData.strategies || []) as unknown as Strategy[]);
     } catch (e) {
       setError((e as Error).message);
     } finally {

@@ -110,8 +110,8 @@ export default function EditImagePage() {
         name: name.trim(),
         description: description.trim(),
         agent_ids: selectedAgents,
-        strategy_id: selectedStrategy || null,
-        environment_id: selectedEnv || null,
+        strategy_id: selectedStrategy || undefined,
+        environment_id: selectedEnv || undefined,
       });
       router.push("/meowone/images");
     } catch (e) {

@@ -957,10 +957,7 @@ type AgentInfo = {
   description?: string;
 };
 
-type SelectedTarget =
-  | { mode: "instance"; id: string }
-  | { mode: "agent"; id: string; name: string };
-
+// ============ Chat 主内容组件 ============
 function ChatContent() {
   const searchParams = useSearchParams();
   const paramInstance = searchParams.get("instance");
