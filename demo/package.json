@@ -1,0 +1,17 @@
+{
+  "name": "electron-demo",
+  "version": "1.0.0",
+  "description": "Electron 基础演示项目",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^41.2.0"
+  }
+}

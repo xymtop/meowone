@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Electron Demo</title>
+  <style>
+    /* 基础样式重置 */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+    }
+
+    /* 容器样式 */
+    .container {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 40px;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    h1 {
+      font-size: 2.5em;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .info {
+      font-size: 1.2em;
+      margin: 10px 0;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+    }
+
+    .info span {
+      font-weight: bold;
+      color: #ffd700;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Hello Electron!</h1>
+    <div class="info">Electron 版本: <span id="electron-version">加载中...</span></div>
+    <div class="info">Chrome 版本: <span id="chrome-version">加载中...</span></div>
+    <div class="info">Node 版本: <span id="node-version">加载中...</span></div>
+    <div class="info">平台: <span id="platform">加载中...</span></div>
+  </div>
+
+  <script>
+    // 通过预加载脚本暴露的 API 获取版本信息
+    document.getElementById('electron-version').textContent = window.electronAPI.getVersion();
+    document.getElementById('chrome-version').textContent = window.electronAPI.getChromeVersion();
+    document.getElementById('node-version').textContent = window.electronAPI.getNodeVersion();
+    document.getElementById('platform').textContent = window.electronAPI.getPlatform();
+  </script>
+</body>
+</html>
