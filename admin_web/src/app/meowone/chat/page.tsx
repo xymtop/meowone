@@ -13,7 +13,6 @@ import { cn } from "@/lib/utils";
 import { MentionPicker, type AgentItem } from "@/components/Chat/MentionPicker";
 
 type Segment = { type: "markdown" | "a2ui" | "mermaid"; value: string };
-type StreamingTool = { toolCallId: string; name: string; status: "running" | "ok" | "error" };
 const A2UI_BLOCK_START = "---A2UI-START---";
 const A2UI_BLOCK_END = "---A2UI-END---";
 
@@ -973,8 +972,9 @@ function ChatContent() {
   const [channelId] = useState("web");
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [thinking, setThinking] = useState<string | null>(null);
-  const [streamingTools, setStreamingTools] = useState<StreamingTool[]>([]);
+  // thinking / tool 事件统一存为页面本地消息，不依赖 setThinking/setStreamingTools
+  const [thinkingMessages, setThinkingMessages] = useState<{ id: string; description: string; timestamp: number }[]>([]);
+  const [toolMessages, setToolMessages] = useState<{ toolCallId: string; name: string; status: "running" | "ok" | "error"; timestamp: number }[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1050,20 +1050,38 @@ function ChatContent() {
     switch (evt.event) {
       case "thinking": {
         const desc = evt.data.description;
-        setThinking(typeof desc === "string" ? desc : "思考中...");
+        const text = typeof desc === "string" ? desc : "思考中...";
+        setThinkingMessages((prev) => {
+          if (prev.length === 0) {
+            return [{ id: crypto.randomUUID(), description: text, timestamp: Date.now() }];
+          }
+          return prev.map((m, i) =>
+            i === prev.length - 1 ? { ...m, description: text, timestamp: Date.now() } : m,
+          );
+        });
         break;
       }
       case "delta": {
         const delta = evt.data.content;
         if (typeof delta === "string") setStreaming((v) => v + delta);
-        if (evt.data.done === true) setThinking(null);
+        if (evt.data.done === true) {
+          setThinkingMessages((prev) => {
+            if (prev.length === 0) return prev;
+            return prev.map((m, i) =>
+              i === prev.length - 1 ? { ...m, description: m.description + " ✓", timestamp: Date.now() } : m,
+            );
+          });
+        }
         break;
       }
       case "tool_call": {
         const toolCallId = evt.data.toolCallId;
         const name = evt.data.name;
         if (typeof toolCallId === "string" && typeof name === "string") {
-          setStreamingTools((prev) => [...prev, { toolCallId, name, status: "running" }]);
+          setToolMessages((prev) => [
+            ...prev,
+            { toolCallId, name, status: "running", timestamp: Date.now() },
+          ]);
         }
         break;
       }
@@ -1071,16 +1089,17 @@ function ChatContent() {
         const toolCallId = evt.data.toolCallId;
         const ok = evt.data.ok === true;
         if (typeof toolCallId === "string") {
-          setStreamingTools((prev) =>
-            prev.map((row) => (row.toolCallId === toolCallId ? { ...row, status: ok ? "ok" : "error" } : row)),
+          setToolMessages((prev) =>
+            prev.map((row) =>
+              row.toolCallId === toolCallId ? { ...row, status: ok ? "ok" : "error" } : row,
+            ),
           );
         }
         break;
       }
       case "done":
       case "error":
-        setThinking(null);
-        setStreamingTools([]);
+        // 保留所有消息，不清空
         break;
       default:
         break;
@@ -1091,8 +1110,7 @@ function ChatContent() {
     abortRef.current?.abort();
     abortRef.current = null;
     setLoading(false);
-    setThinking(null);
-    setStreamingTools([]);
+    // 保留所有消息，不清空
   };
 
   const send = async () => {
@@ -1115,11 +1133,11 @@ function ChatContent() {
     const controller = new AbortController();
     abortRef.current = controller;
     setPrompt("");
-    setStreaming("");
     setError("");
     setLoading(true);
-    setThinking(null);
-    setStreamingTools([]);
+    setStreaming("");
+    setThinkingMessages([]);
+    setToolMessages([]);
     setMessages((prev) => [
       ...prev,
       {
@@ -1152,8 +1170,7 @@ function ChatContent() {
       if (abortRef.current === controller) abortRef.current = null;
       setLoading(false);
       setStreaming("");
-      setThinking(null);
-      setStreamingTools([]);
+      // 保留 thinking 和 tool 消息，不清空
     }
   };
 
@@ -1164,8 +1181,8 @@ function ChatContent() {
     setStreaming("");
     setError("");
     setLoading(true);
-    setThinking(null);
-    setStreamingTools([]);
+    setThinkingMessages([]);
+    setToolMessages([]);
 
     try {
       await meowoneApi.streamA2UIAction(
@@ -1189,8 +1206,7 @@ function ChatContent() {
       if (abortRef.current === controller) abortRef.current = null;
       setLoading(false);
       setStreaming("");
-      setThinking(null);
-      setStreamingTools([]);
+      // 保留 thinking 和 tool 消息，不清空
     }
   };
 
@@ -1198,7 +1214,7 @@ function ChatContent() {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages, streaming, thinking, streamingTools]);
+  }, [messages, streaming, thinkingMessages, toolMessages]);
 
   const adjustTextareaHeight = () => {
     const el = textareaRef.current;
@@ -1585,19 +1601,35 @@ function ChatContent() {
                 </div>
               );
             })}
-            {streamingTools.length ? (
-              <div className="max-w-[80%] rounded-2xl border border-blue-100 bg-blue-50 px-5 py-3.5 text-[13px] text-blue-800 mb-6 shadow-sm">
+            {/* 持久化的 thinking 消息 */}
+            {thinkingMessages.map((m) => (
+              <div
+                key={`thinking-${m.id}`}
+                className="max-w-[80%] rounded-2xl border border-blue-100 bg-blue-50 px-5 py-3.5 text-[13px] text-blue-800 mb-4 shadow-sm"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:0ms]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:300ms]" />
+                  </div>
+                  <span>{m.description}</span>
+                </div>
+              </div>
+            ))}
+            {/* 持久化的 tool 消息 */}
+            {toolMessages.length > 0 && (
+              <div className="max-w-[80%] rounded-2xl border border-purple-100 bg-purple-50 px-5 py-3.5 text-[13px] text-purple-800 mb-4 shadow-sm">
                 <div className="mb-2 font-medium">工具调用</div>
                 <div className="flex flex-wrap gap-2">
-                  {streamingTools.map((t, idx) => (
+                  {toolMessages.map((t) => (
                     <span
-                      key={`${t.toolCallId}-${idx}`}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 shadow-sm ring-1 ring-blue-100"
-                      title={t.toolCallId}
+                      key={`tool-${t.toolCallId}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 shadow-sm ring-1 ring-purple-100"
                     >
                       {t.name}
                       {t.status === "running" && (
-                        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500 align-middle" />
+                        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 align-middle" />
                       )}
                       {t.status === "ok" && <span className="text-emerald-600">✓</span>}
                       {t.status === "error" && <span className="text-red-600">✗</span>}
@@ -1605,24 +1637,12 @@ function ChatContent() {
                   ))}
                 </div>
               </div>
-            ) : null}
+            )}
             {streaming ? (
               <div className="flex justify-start mb-6">
                 <div className="relative w-full max-w-[80%] overflow-visible rounded-2xl border border-gray-100 bg-white px-6 py-4 pr-12 text-[14px] leading-6 text-[#1d2129] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
                   <CopyMessageButton text={streaming} variant="assistant" />
                   <RichContent content={streaming} onA2UIAction={handleA2UIAction} />
-                </div>
-              </div>
-            ) : null}
-            {thinking ? (
-              <div className="max-w-[80%] rounded-xl border border-gray-100 bg-slate-50 px-5 py-3 text-[13px] text-slate-500 mb-6 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1">
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:0ms]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:150ms]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:300ms]" />
-                  </div>
-                  <span>{thinking}</span>
                 </div>
               </div>
             ) : null}

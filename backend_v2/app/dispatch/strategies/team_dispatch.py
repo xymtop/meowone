@@ -1,19 +1,17 @@
 """
 Team Dispatch 调度策略 —— 团队分发
 
-将用户任务分解为子任务，分配给团队成员并行/串行执行，最后汇总结果。
-
-设计：
-  - team_id 必须由用户在 strategy_config 中配置（业务语义，无法自动推导）
-  - 团队成员来源：agent_ids_json（gateway 已预填充到 ctx.candidate_runtimes）
-  - 其他参数（parallel、decompose_prompt、max_members）全部有默认值
+设计理念：
+  - 领导-成员架构：领导负责接收任务、分析任务、指派成员、汇总汇报
+  - 团队成员信息动态注入：成员的名称、能力等信息自动注入到领导和其他成员的提示词中
+  - 配置极简：只需配置领导 ID（leader_id），成员信息自动获取
 
 strategy_config 格式：
     {
-        "team_id": "团队 ID（必填）",
-        "decompose_prompt": "自定义分解提示词（可选）",
-        "parallel": true,          // 是否并行执行，默认 true
-        "max_members": 5           // 最多使用几个成员，默认 5
+        "leader_id": "领导智能体 ID（必填）",
+        "parallel": true,              // 是否并行执行，默认 true
+        "overtime_threshold": 30,       // 加班阈值（秒），默认 30
+        "max_iterations": 5             // 最大迭代次数，默认 5
     }
 
 注册名称: "team_dispatch"
@@ -39,198 +37,368 @@ async def team_dispatch_strategy(ctx: "DispatchContext") -> AsyncIterator[LoopEv
     """
     团队分发策略
 
-    team_id：必须从 strategy_config 获取（用户显式配置）
-    团队成员：从 gateway 预填充的 ctx.candidate_runtimes 取
+    领导-成员架构：
+      1. 领导接收用户消息
+      2. 领导分析任务
+      3. 领导指派团队成员
+      4. 成员执行任务（可并行）
+      5. 成员汇报给领导
+      6. 领导汇总并向用户汇报
     """
     from app.agents.caller import call_agent, AgentCallInput
 
     config = ctx.strategy_config
     parallel = bool(config.get("parallel", True))
-    max_members = int(config.get("max_members", 5))
-    decompose_prompt = str(config.get("decompose_prompt") or "").strip()
+    max_iterations = int(config.get("max_iterations", 5))
 
-    # team_id 必须用户配置（业务语义，无法自动推导）
-    team_id = str(config.get("team_id") or "").strip()
-    if not team_id:
-        # 尝试从镜像 metadata_json.team_name 兜底
-        team_id = str(config.get("team_name") or "").strip()
-    if not team_id:
+    logger.info("team_dispatch 收到 config: %s, agent_id: %s, image_id: %s", config, ctx.agent_id, ctx.image_id)
+
+    # 领导 ID 优先级：strategy_config.leader_id > ctx.agent_id
+    leader_id = str(config.get("leader_id") or ctx.agent_id or "").strip()
+    if not leader_id:
         yield ErrorEvent(
             code="MISSING_CONFIG",
-            message="team_dispatch 策略需要在 strategy_config 中配置 team_id",
+            message="team_dispatch 策略需要在 strategy_config 中配置 leader_id，或通过 agent_id 指定领导智能体",
         )
         yield DoneEvent(message_id=ctx.message_id, loop_rounds=0, total_duration=0)
         return
 
-    # 团队成员来自 ctx.candidate_runtimes（gateway 从 agent_ids_json 预填充）
-    all_members: List[Any] = list(ctx.candidate_runtimes)
-
-    # 如果 gateway 没有预填充（直接从 agent_id 调用），则从 image.agent_ids_json 加载
-    if not all_members and ctx.image_id:
-        all_members = await _load_members_from_image(ctx.agent_id or "", ctx.image_id)
-
-    if not all_members:
-        yield ErrorEvent(code="NO_TEAM_MEMBERS", message=f"团队 {team_id} 没有可用成员")
+    # ── 构建领导运行时 ──
+    leader_runtime = await _build_agent_runtime(leader_id, ctx)
+    if not leader_runtime:
+        yield ErrorEvent(code="LEADER_NOT_FOUND", message=f"领导智能体 {leader_id} 未找到")
         yield DoneEvent(message_id=ctx.message_id, loop_rounds=0, total_duration=0)
         return
 
-    member_runtimes = all_members[:max_members]
-    member_names = [getattr(r, "name", f"成员{i+1}") for i, r in enumerate(member_runtimes)]
+    leader_name = getattr(leader_runtime, "name", "团队领导")
 
-    # ── 阶段 1：分解任务 ──
-    yield ThinkingEvent(step=1, description=f"团队 [{team_id}] 正在分析任务，准备分配给 {len(member_runtimes)} 位成员...")
+    # ── 获取团队成员列表 ──
+    members, member_names = await _load_team_members(leader_id, ctx)
+    if not members:
+        yield ErrorEvent(code="NO_TEAM_MEMBERS", message=f"团队 {leader_name} 没有可用成员")
+        yield DoneEvent(message_id=ctx.message_id, loop_rounds=0, total_duration=0)
+        return
 
-    subtasks = await _decompose_task(
-        task=ctx.user_message,
-        num_members=len(member_runtimes),
-        decompose_prompt=decompose_prompt,
-        model=ctx.model,
-    )
+    # ── 构建团队成员上下文（用于注入到提示词）──
+    team_context = _build_team_context(members, member_names)
 
-    yield ThinkingEvent(step=2, description=f"任务已分解，准备分配给：{', '.join(member_names)}")
+    # ── 阶段 1：领导接收任务 ──
+    yield ThinkingEvent(step=1, description=f"{leader_name} 已经收到您的消息，正在分析任务...")
 
-    # ── 阶段 2：执行子任务 ──
-    async def _run_member(runtime: Any, subtask: str) -> str:
-        """运行单个成员，返回最终结果字符串"""
-        call_input = AgentCallInput(
-            user_message=subtask,
-            history=ctx.history,
-            session_id=ctx.session_id,
-            message_id=str(uuid.uuid4()),
-            model=ctx.model,
-        )
-        result_parts: List[str] = []
-        async for event in call_agent(runtime, call_input):
-            if isinstance(event, DeltaEvent) and event.content:
-                result_parts.append(event.content)
-        return "".join(result_parts).strip()
+    # ── 阶段 2：领导分析任务 ──
+    analysis_prompt = f"""你是一个团队的领导智能体，正在分析用户任务。
 
+用户任务：
+{ctx.user_message}
+
+团队成员信息：
+{team_context}
+
+请分析这个任务，思考需要指派哪些成员来完成，并给出任务分配计划。
+"""
+    analysis_result = await _call_leader(leader_runtime, analysis_prompt, ctx)
+    yield ThinkingEvent(step=2, description=f"{leader_name} 分析完毕，正在制定任务分配方案...")
+
+    # ── 阶段 3：领导指派任务 ──
+    yield ThinkingEvent(step=3, description=f"{leader_name} 正在向团队成员指派任务...")
+
+    assignment_prompt = f"""你是一个团队的领导智能体，需要将任务分配给团队成员。
+
+用户任务：
+{ctx.user_message}
+
+团队成员信息：
+{team_context}
+
+请为每个成员分配具体的子任务，格式如下（每行一个成员的任务）：
+【成员名称】：具体任务描述
+
+请确保任务分配合理，充分利用每个成员的专长。
+"""
+    assignment_result = await _call_leader(leader_runtime, assignment_prompt, ctx)
+
+    # 解析分配结果
+    task_assignments = _parse_assignments(assignment_result, member_names)
+
+    # ── 阶段 4：成员执行任务 ──
     if parallel:
-        # ── 并行执行 ──
-        coros = [_run_member(r, s) for r, s in zip(member_runtimes, subtasks)]
-        pending: List[Any] = [asyncio.ensure_future(c) for c in coros]
-        # future → index 映射（asyncio.wait 返回的 future 索引）
+        # 并行执行
+        yield ThinkingEvent(step=4, description=f"{leader_name} 已指派任务，{'、'.join(member_names[:-1])} 和 {member_names[-1]} 开始并行工作...")
+
+        async def _run_member_work(runtime: Any, member_name: str, subtask: str) -> Dict[str, Any]:
+            """运行单个成员执行任务"""
+            work_prompt = f"""你是团队成员 {member_name}，正在执行领导分配的任务。
+
+你的任务：
+{subtask}
+
+请认真完成这个任务，并汇报工作结果。
+"""
+            result = await _call_member(runtime, work_prompt, ctx, member_name)
+            return {"name": member_name, "result": result}
+
+        coros = [_run_member_work(r, n, t) for r, n, t in zip(members, member_names, task_assignments)]
+        pending = [asyncio.ensure_future(c) for c in coros]
         fut_to_idx: Dict[Any, int] = {id(f): i for i, f in enumerate(pending)}
 
-        if len(member_names) == 1:
-            yield ThinkingEvent(step=3, description=f"{member_names[0]} 正在工作...")
-        else:
-            names_str = "、".join(member_names[:-1]) + f" 和 {member_names[-1]}"
-            yield ThinkingEvent(step=3, description=f"{names_str} 正在并行工作...")
-
-        results: List[Any] = [None] * len(member_runtimes)
+        results: List[Dict[str, Any]] = [{}] * len(members)
         finished = 0
+
         while pending:
-            done_inner, pending = await asyncio.wait(
-                pending, return_when=asyncio.FIRST_COMPLETED
-            )
-            for fut in done_inner:
+            done_set, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for fut in done_set:
                 idx = fut_to_idx[id(fut)]
                 results[idx] = fut.result()
                 finished += 1
-                if finished < len(member_runtimes):
-                    done_names = member_names[:finished]
-                    running_name = member_names[finished]
-                    remaining = len(member_runtimes) - finished
-                    done_str = "、".join(done_names)
+
+                # 生成详细状态事件
+                member_name = results[idx]["name"]
+                if finished < len(members):
+                    remaining = len(members) - finished
+                    remaining_names = [r["name"] for r in results if r and r["name"] != member_name]
+                    if remaining > 1:
+                        yield ThinkingEvent(
+                            step=5,
+                            description=f"{member_name} 任务干完了，正在向 {leader_name} 汇报工作。剩余 {remaining} 位成员加班干活中：{'、'.join(remaining_names)}"
+                        )
+                    else:
+                        yield ThinkingEvent(
+                            step=5,
+                            description=f"{member_name} 任务干完了，正在向 {leader_name} 汇报工作。最后一位成员 {remaining_names[0] if remaining_names else ''} 正在收尾..."
+                        )
+                else:
                     yield ThinkingEvent(
-                        step=3,
-                        description=f"{done_str} 已完成，{running_name} 等 {remaining} 位成员工作中...",
+                        step=6,
+                        description=f"{member_name} 任务干完了，最后一位成员完成，所有人正在向领导汇报..."
                     )
+
     else:
-        # ── 串行执行 ──
+        # 串行执行
         results = []
-        for idx, (r, subtask, name) in enumerate(
-            zip(member_runtimes, subtasks, member_names), start=3
-        ):
-            names_remaining = member_names[idx:]
-            if len(names_remaining) == 1:
+        for i, (runtime, member_name, subtask) in enumerate(zip(members, member_names, task_assignments)):
+            if i == 0:
                 yield ThinkingEvent(
-                    step=idx, description=f"{name} 正在工作...（{idx-2}/{len(member_runtimes)}）"
+                    step=4,
+                    description=f"{leader_name} 指派 {member_name} 执行任务：{subtask}"
                 )
             else:
-                names_str = "、".join(names_remaining)
                 yield ThinkingEvent(
-                    step=idx,
-                    description=f"{name} 正在工作，其他成员等待中：{names_str}（{idx-2}/{len(member_runtimes)}）",
-                )
-            res = await _run_member(r, subtask)
-            results.append(res)
-            if idx < len(member_runtimes) + 2:
-                yield ThinkingEvent(
-                    step=idx + 1,
-                    description=f"{name} 已完成，{member_names[idx - 2 + 1]} 接手工作...",
+                    step=4 + i,
+                    description=f"{member_name} 正在干活...（{i+1}/{len(members)}）"
                 )
 
-    # ── 阶段 3：汇总结果 ──
-    yield ThinkingEvent(
-        step=97, description="正在汇总各位成员的工作结果..."
-    )
+            result = await _call_member(runtime, subtask, ctx, member_name)
+            results.append({"name": member_name, "result": result})
 
-    summary_parts: List[str] = ["## 团队执行结果\n"]
-    for i, (r, result) in enumerate(zip(member_runtimes, results), start=1):
-        r_str = str(result) if not isinstance(result, Exception) else f"[错误: {result}]"
-        summary_parts.append(f"**成员 {i}（{member_names[i-1]}）**：\n{r_str}\n")
+            if i < len(members) - 1:
+                next_member = member_names[i + 1]
+                yield ThinkingEvent(
+                    step=5 + i,
+                    description=f"{member_name} 任务干完了，正在向 {leader_name} 汇报。{next_member} 接手工作..."
+                )
+            else:
+                yield ThinkingEvent(
+                    step=5 + i,
+                    description=f"{member_name} 任务干完了，正在向 {leader_name} 汇报。最后一位成员完成..."
+                )
 
-    summary = "\n".join(summary_parts)
-    yield ThinkingEvent(step=98, description="汇总完毕，正在整理最终报告...")
-    yield DeltaEvent(message_id=ctx.message_id, content=summary, done=False)
+    # ── 阶段 5：领导汇总结果 ──
+    yield ThinkingEvent(step=90, description=f"所有成员任务完成，{leader_name} 正在准备向您汇报...")
+
+    # 构建汇报上下文
+    member_reports = "\n\n".join([
+        f"【{r['name']} 的汇报】：\n{r['result']}" for r in results
+    ])
+
+    report_prompt = f"""你是一个团队的领导智能体，需要汇总成员的汇报并向用户汇报最终结果。
+
+用户原始任务：
+{ctx.user_message}
+
+团队成员任务分配：
+{assignment_result}
+
+成员汇报内容：
+{member_reports}
+
+请汇总所有成员的工作结果，用清晰的结构向用户汇报最终成果。
+"""
+    final_report = await _call_leader(leader_runtime, report_prompt, ctx)
+
+    # ── 阶段 6：汇报给用户 ──
+    yield ThinkingEvent(step=98, description=f"{leader_name} 正在准备向您汇报...")
+    yield ThinkingEvent(step=99, description="任务完成")
+    yield DeltaEvent(message_id=ctx.message_id, content=final_report, done=False)
     yield DeltaEvent(message_id=ctx.message_id, content="", done=True)
-    yield DoneEvent(message_id=ctx.message_id, loop_rounds=len(member_runtimes), total_duration=0)
+    yield DoneEvent(message_id=ctx.message_id, loop_rounds=len(members) + 2, total_duration=0)
 
 
-async def _load_members_from_image(exclude_agent_id: str, image_id: str) -> List[Any]:
-    """从 image.agent_ids_json 加载成员运行时"""
+async def _build_agent_runtime(agent_id: str, ctx: "DispatchContext") -> Any:
+    """根据 agent_id 构建运行时"""
+    from app.agents.builder import agent_builder
+
+    try:
+        runtime = await agent_builder.build_by_id(agent_id)
+        return runtime
+    except Exception as e:
+        logger.error("构建智能体运行时失败 %s: %s", agent_id, e)
+        return None
+
+
+async def _load_team_members(leader_id: str, ctx: "DispatchContext") -> tuple[List[Any], List[str]]:
+    """从领导配置中加载团队成员列表"""
     from app.agents.builder import agent_builder
     from app.db.queries.agent_instances import get_agent_image_by_id
 
+    members = []
+    member_names = []
+
+    async def _load_from_image(image_id: str) -> None:
+        """从镜像加载成员"""
+        try:
+            image = await get_agent_image_by_id(image_id)
+            if image:
+                agent_ids = image.get("agent_ids_json") or []
+                for aid in agent_ids:
+                    if aid and aid != leader_id:
+                        r = await agent_builder.build_by_id(aid)
+                        if r:
+                            members.append(r)
+                            member_names.append(getattr(r, "name", f"成员{len(members)}"))
+        except Exception as e:
+            logger.error("从镜像 %s 加载成员失败: %s", image_id, e)
+
     try:
-        image = await get_agent_image_by_id(image_id)
-        if not image:
-            return []
-        agent_ids: List[str] = image.get("agent_ids_json") or []
-        members: List[Any] = []
-        for aid in agent_ids:
-            if aid and aid != exclude_agent_id:
-                r = await agent_builder.build_by_id(aid)
-                if r:
-                    members.append(r)
-        return members
-    except Exception:
-        return []
+        # 优先从 ctx.image_id 获取（gateway 已预填充）
+        if ctx.image_id:
+            await _load_from_image(ctx.image_id)
+
+        # 其次从领导的运行时属性获取
+        if not members:
+            leader_runtime = await agent_builder.build_by_id(leader_id)
+            if leader_runtime:
+                # 从 image_id 属性获取
+                image_id = getattr(leader_runtime, "image_id", None) or getattr(leader_runtime, "_image_id", None)
+                if image_id:
+                    await _load_from_image(image_id)
+
+        # 最后从领导 runtime 的 metadata 获取
+        if not members:
+            leader_runtime = await agent_builder.build_by_id(leader_id)
+            if leader_runtime:
+                metadata = getattr(leader_runtime, "metadata_json", {}) or {}
+                agent_ids = metadata.get("agent_ids_json") or []
+                for aid in agent_ids:
+                    if aid and aid != leader_id:
+                        r = await agent_builder.build_by_id(aid)
+                        if r:
+                            members.append(r)
+                            member_names.append(getattr(r, "name", f"成员{len(members)}"))
+
+    except Exception as e:
+        logger.error("加载团队成员失败: %s", e)
+
+    return members, member_names
 
 
-async def _decompose_task(
-    task: str,
-    num_members: int,
-    decompose_prompt: str,
-    model: str | None,
-) -> List[str]:
-    """用 LLM 将任务分解为子任务，失败时回退到简单复制"""
-    if num_members <= 1:
-        return [task]
+def _build_team_context(members: List[Any], member_names: List[str]) -> str:
+    """构建团队成员上下文，用于注入到提示词中"""
+    lines = []
+    for i, (runtime, name) in enumerate(zip(members, member_names), start=1):
+        # 获取成员的能力描述
+        capabilities = getattr(runtime, "capabilities", None)
+        if capabilities:
+            # CapabilitiesRegistry 有 list() 方法或 _items 属性
+            if hasattr(capabilities, "list"):
+                caps = capabilities.list()
+            elif hasattr(capabilities, "_items"):
+                caps = list(capabilities._items.values())
+            elif hasattr(capabilities, "values"):
+                caps = list(capabilities.values())
+            else:
+                caps = []
+            cap_desc = "、".join([getattr(c, "name", str(c)) for c in caps]) if caps else "综合能力"
+        else:
+            cap_desc = "综合能力"
 
-    prompt_text = decompose_prompt or (
-        f"请将以下任务分解为 {num_members} 个子任务，每个子任务一行，不要编号，直接输出子任务内容：\n\n{task}"
+        # 获取成员描述
+        description = getattr(runtime, "description", "") or getattr(runtime, "prompt", "") or ""
+
+        lines.append(f"{i}. {name}（能力：{cap_desc}）")
+        if description:
+            lines.append(f"   描述：{description[:100]}{'...' if len(description) > 100 else ''}")
+
+    return "\n".join(lines) if lines else "（暂无团队成员信息）"
+
+
+def _parse_assignments(assignment_text: str, member_names: List[str]) -> List[str]:
+    """解析领导的任务分配结果"""
+    import re
+
+    assignments = []
+    for name in member_names:
+        # 匹配 【成员名称】：任务 或 成员名称：任务
+        pattern = rf"【?{re.escape(name)}】?[：:]\s*(.+?)(?=\n【?[^\s】:]+[】:]|$)"
+        match = re.search(pattern, assignment_text, re.DOTALL)
+        if match:
+            task = match.group(1).strip()
+            # 清理任务描述
+            task = re.sub(r'^\d+[.、]\s*', '', task)
+            assignments.append(task)
+        else:
+            assignments.append(f"请 {name} 完成分配的任务")
+
+    # 如果解析失败，使用默认分配
+    if len(assignments) < len(member_names):
+        assignments.extend([f"请 {name} 完成自己的任务" for name in member_names[len(assignments):]])
+
+    return assignments[:len(member_names)]
+
+
+async def _call_leader(runtime: Any, prompt: str, ctx: "DispatchContext") -> str:
+    """调用领导智能体"""
+    from app.agents.caller import call_agent, AgentCallInput
+
+    call_input = AgentCallInput(
+        user_message=prompt,
+        history=ctx.history,
+        session_id=ctx.session_id,
+        message_id=str(uuid.uuid4()),
+        model=ctx.model,
     )
 
-    try:
-        from app.llm.client import chat_completion_stream
-        content = ""
-        async for chunk in chat_completion_stream(
-            messages=[{"role": "user", "content": prompt_text}],
-            tools=None,
-            model=model,
-        ):
-            if chunk["type"] == "content_delta":
-                content += chunk["content"]
+    result_parts: List[str] = []
+    async for event in call_agent(runtime, call_input):
+        if isinstance(event, DeltaEvent) and event.content:
+            result_parts.append(event.content)
 
-        lines = [ln.strip() for ln in content.strip().splitlines() if ln.strip()]
-        if lines:
-            while len(lines) < num_members:
-                lines.append(task)
-            return lines[:num_members]
-    except Exception as e:
-        logger.warning("任务分解失败，回退到复制策略: %s", e)
+    return "".join(result_parts).strip()
 
-    return [f"[子任务 {i+1}/{num_members}] {task}" for i in range(num_members)]
+
+async def _call_member(runtime: Any, task: str, ctx: "DispatchContext", member_name: str) -> str:
+    """调用成员智能体"""
+    from app.agents.caller import call_agent, AgentCallInput
+
+    # 动态注入成员名称到提示词
+    member_prompt = f"""你是团队成员 {member_name}，正在执行领导分配的任务。
+
+请认真完成任务，汇报结果时使用 {member_name} 的身份。
+
+任务内容：
+{task}
+"""
+
+    call_input = AgentCallInput(
+        user_message=member_prompt,
+        history=ctx.history,
+        session_id=ctx.session_id,
+        message_id=str(uuid.uuid4()),
+        model=ctx.model,
+    )
+
+    result_parts: List[str] = []
+    async for event in call_agent(runtime, call_input):
+        if isinstance(event, DeltaEvent) and event.content:
+            result_parts.append(event.content)
+
+    return "".join(result_parts).strip()

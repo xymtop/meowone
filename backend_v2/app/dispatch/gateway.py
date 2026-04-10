@@ -220,7 +220,9 @@ async def _resolve_from_instance(
             if sc:
                 config: Dict[str, Any] = sc.get("config_json") or {}
                 config.update(instance_config)
-                strategy_name = str(sc.get("strategy_id") or "").strip()
+                # strategy_id 是 UUID，需要转成策略名称（如 "team_dispatch"）
+                strategy_id = str(sc.get("strategy_id") or "").strip()
+                strategy_name = await _strategy_name_by_id(strategy_id) if strategy_id else "direct"
                 if strategy_name:
                     return strategy_name, config, None, resolved_image_id
 
