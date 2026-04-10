@@ -58,6 +58,7 @@ async def dispatch(
     )
 
     # ─── 步骤 2: 查找调度策略 ───
+    yield ThinkingEvent(step=2, description=f"正在查询调度策略: {ctx.strategy_name}...")
 
     fn = get_strategy(ctx.strategy_name)
     if fn is None:
@@ -69,7 +70,9 @@ async def dispatch(
         yield DoneEvent(message_id=mid, loop_rounds=0, total_duration=0)
         return
 
-    # ─── 步骤 3: 开始调度 ───
+    # ─── 步骤 3: 开始执行 ───
+    yield ThinkingEvent(step=3, description="调度决策完成，开始执行任务...")
+
     logger.info(
         "dispatch: strategy=%s agent_id=%s instance_id=%s image_id=%s",
         ctx.strategy_name, ctx.agent_id, ctx.instance_id, ctx.image_id,
@@ -77,6 +80,9 @@ async def dispatch(
 
     async for event in fn(ctx):
         yield event
+
+    # ─── 步骤 4: 调度完成 ───
+    yield ThinkingEvent(step=4, description="调度完成")
 
 
 async def _build_context(

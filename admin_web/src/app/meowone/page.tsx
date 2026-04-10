@@ -428,7 +428,7 @@ export default function QuickStartPage() {
             </Link> */}
 
             {/* 监控 */}
-            <Link
+            {/* <Link
               href="/meowone/monitoring"
               className="group rounded-xl border border-gray-200 bg-white p-4 transition-all hover:border-gray-300 hover:shadow-sm"
             >
@@ -441,7 +441,7 @@ export default function QuickStartPage() {
                   <p className="text-sm text-gray-500">查看运行状态</p>
                 </div>
               </div>
-            </Link>
+            </Link> */}
 
             {/* 历史记录 */}
             <Link

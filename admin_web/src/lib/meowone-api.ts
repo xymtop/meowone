@@ -1,6 +1,8 @@
-// 客户端和服务端都使用相对路径，通过 Next.js 代理到后端
-// 在 Docker 中，Next.js 会将 /api/* 等请求代理到 backend:8000
-const API_BASE = "";
+// 客户端用绝对 URL 直接访问后端（绕过 Next.js 代理，避免 SSE 缓冲）
+// 服务端走相对路径通过 next.config 代理
+const API_BASE = typeof window !== "undefined"
+  ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000")
+  : "";
 
 export type Session = {
   id: string;
