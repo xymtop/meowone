@@ -27,15 +27,24 @@ const nextConfig = {
     ]
   },
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    // 在 Docker 网络内，通过服务名访问后端
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://backend:8000";
     return [
       {
+        source: "/health",
+        destination: `${backendUrl}/health`,
+      },
+      {
         source: "/docs/:path*",
-        destination: `${apiUrl}/docs/:path*`,
+        destination: `${backendUrl}/docs/:path*`,
       },
       {
         source: "/openapi.json",
-        destination: `${apiUrl}/openapi.json`,
+        destination: `${backendUrl}/openapi.json`,
+      },
+      {
+        source: "/api/:path*",
+        destination: `${backendUrl}/api/:path*`,
       },
     ];
   },

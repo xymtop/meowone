@@ -192,7 +192,7 @@ export default function QuickStartPage() {
       const defaultModel = modelList.find((m) => (m as Record<string, unknown>).is_default) as Record<string, unknown> | undefined;
       const agentList = (agents as { agents?: Agent[] }).agents || [];
 
-      if (healthStatus !== "ok" && healthStatus !== "ok") {
+      if (healthStatus !== "ok") {
         warnings.push("后端服务未连接");
       }
       if (!defaultModel) {

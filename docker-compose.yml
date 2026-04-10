@@ -3,13 +3,11 @@
 # ============================================================
 #
 # 快速启动（前后端一键运行）：
-#   cp .env.docker .env     # 只需填 LLM_API_KEY 等关键配置
 #   docker-compose up -d
 #
 # 启动成功后访问：
 #   前端：http://localhost:9006
-#   后端 API：http://localhost:8000
-#   API 文档：http://localhost:8000/docs
+#   API 文档：http://localhost:9006/docs
 #
 # 查看日志：
 #   docker-compose logs -f
@@ -24,25 +22,22 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: ./backend_v2
       dockerfile: Dockerfile
     container_name: meowone-backend
-    ports:
-      - "8000:8000"
+    # 不暴露后端端口，后端仅在 Docker 内部网络通信
     env_file:
       - .env
+    environment:
+      # Docker 内使用绝对路径挂载的数据库文件
+      - DATABASE_PATH=/app/data/meowone.db
     volumes:
-      # 数据库持久化到宿主机（可选）
-      - meowone-data:/app/data
+      # 挂载宿主机文件（兼容本地和 Docker 两种运行方式）
+      - ./meowone.db:/app/data/meowone.db
+      - ./.meowone:/app/.meowone
     networks:
       - meowone-net
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
 
   frontend:
     build:
@@ -50,13 +45,13 @@ services:
       dockerfile: Dockerfile
     container_name: meowone-frontend
     ports:
-      - "9006:3000"
+      - "9007:3000"
     environment:
       # 在 docker 网络内，通过服务名访问后端
       - NEXT_PUBLIC_API_URL=http://backend:8000
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_started
     networks:
       - meowone-net
     restart: unless-stopped
@@ -64,6 +59,3 @@ services:
 networks:
   meowone-net:
     driver: bridge
-
-volumes:
-  meowone-data:

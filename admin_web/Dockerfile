@@ -25,7 +25,7 @@ COPY package.json pnpm-lock.yaml* ./
 # 使用阿里云镜像加速安装
 RUN corepack enable pnpm && \
     pnpm config set registry https://registry.npmmirror.com && \
-    pnpm install --frozen-lockfile
+    pnpm install --no-frozen-lockfile
 
 # 复制源码并构建
 COPY . .

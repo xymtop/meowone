@@ -18,11 +18,27 @@ def _repo_root() -> Path:
     # __file__ 是 /path/to/backend/app/services/skill_fs.py
     # 需要找 /path/to/meowone/
     p = Path(__file__).resolve()
-    for i in range(10):
+
+    # 容器内检测：检查 /app/.meowone 或 /app 下是否有 .meowone
+    if str(p).startswith("/app"):
+        app_meowone = Path("/app/.meowone")
+        if app_meowone.exists():
+            return Path("/app")
+        # 如果 /app 下没有 .meowone，向下找（可能安装在 /app/meowone/）
+        if (Path("/app/meowone/.meowone").exists()):
+            return Path("/app/meowone")
+        return Path("/app")
+
+    # 本地开发环境：向上查找 .meowone 目录
+    max_depth = min(10, len(p.parents) - 1)
+    for i in range(max_depth):
         if (p.parents[i] / ".meowone").exists():
             return p.parents[i]
+
     # fallback: 假设结构是 xxx/meowone/backend/...
-    return p.parents[3]  # /path/to/meowone
+    if len(p.parents) >= 4:
+        return p.parents[3]
+    return p.parent
 
 
 def _config_root() -> Path:

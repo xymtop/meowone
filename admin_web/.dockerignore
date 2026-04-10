@@ -1,0 +1,8 @@
+# exclude node_modules and git
+node_modules
+.git
+.next
+*.log
+.DS_Store
+*.env
+.env.*

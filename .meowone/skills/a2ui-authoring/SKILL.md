@@ -6,6 +6,7 @@ description: Author Google A2UI v0.8 surfaces in Markdown (a2ui fenced blocks) w
 # A2UI authoring
 
 
+
 When the user needs interactive UI:
 
 1. Prefer A2UI v0.8 in a Markdown code block with language tag `a2ui`.

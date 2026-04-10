@@ -972,9 +972,6 @@ function ChatContent() {
   const [channelId] = useState("web");
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  // thinking / tool 事件统一存为页面本地消息，不依赖 setThinking/setStreamingTools
-  const [thinkingMessages, setThinkingMessages] = useState<{ id: string; description: string; timestamp: number }[]>([]);
-  const [toolMessages, setToolMessages] = useState<{ toolCallId: string; name: string; status: "running" | "ok" | "error"; timestamp: number }[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1048,58 +1045,13 @@ function ChatContent() {
 
   const onStreamEvent = (evt: ChatEvent) => {
     switch (evt.event) {
-      case "thinking": {
-        const desc = evt.data.description;
-        const text = typeof desc === "string" ? desc : "思考中...";
-        setThinkingMessages((prev) => {
-          if (prev.length === 0) {
-            return [{ id: crypto.randomUUID(), description: text, timestamp: Date.now() }];
-          }
-          return prev.map((m, i) =>
-            i === prev.length - 1 ? { ...m, description: text, timestamp: Date.now() } : m,
-          );
-        });
-        break;
-      }
       case "delta": {
         const delta = evt.data.content;
         if (typeof delta === "string") setStreaming((v) => v + delta);
-        if (evt.data.done === true) {
-          setThinkingMessages((prev) => {
-            if (prev.length === 0) return prev;
-            return prev.map((m, i) =>
-              i === prev.length - 1 ? { ...m, description: m.description + " ✓", timestamp: Date.now() } : m,
-            );
-          });
-        }
-        break;
-      }
-      case "tool_call": {
-        const toolCallId = evt.data.toolCallId;
-        const name = evt.data.name;
-        if (typeof toolCallId === "string" && typeof name === "string") {
-          setToolMessages((prev) => [
-            ...prev,
-            { toolCallId, name, status: "running", timestamp: Date.now() },
-          ]);
-        }
-        break;
-      }
-      case "tool_result": {
-        const toolCallId = evt.data.toolCallId;
-        const ok = evt.data.ok === true;
-        if (typeof toolCallId === "string") {
-          setToolMessages((prev) =>
-            prev.map((row) =>
-              row.toolCallId === toolCallId ? { ...row, status: ok ? "ok" : "error" } : row,
-            ),
-          );
-        }
         break;
       }
       case "done":
       case "error":
-        // 保留所有消息，不清空
         break;
       default:
         break;
@@ -1136,8 +1088,6 @@ function ChatContent() {
     setError("");
     setLoading(true);
     setStreaming("");
-    setThinkingMessages([]);
-    setToolMessages([]);
     setMessages((prev) => [
       ...prev,
       {
@@ -1161,6 +1111,7 @@ function ChatContent() {
       }, onStreamEvent, {
         signal: controller.signal,
       });
+      // 对话结束后重新拉取完整消息（含后端写入的 thinking/tool 事件）
       const fresh = await meowoneApi.listMessages(targetSessionId);
       setMessages(fresh);
       await loadSessions();
@@ -1170,7 +1121,6 @@ function ChatContent() {
       if (abortRef.current === controller) abortRef.current = null;
       setLoading(false);
       setStreaming("");
-      // 保留 thinking 和 tool 消息，不清空
     }
   };
 
@@ -1181,8 +1131,6 @@ function ChatContent() {
     setStreaming("");
     setError("");
     setLoading(true);
-    setThinkingMessages([]);
-    setToolMessages([]);
 
     try {
       await meowoneApi.streamA2UIAction(
@@ -1206,7 +1154,6 @@ function ChatContent() {
       if (abortRef.current === controller) abortRef.current = null;
       setLoading(false);
       setStreaming("");
-      // 保留 thinking 和 tool 消息，不清空
     }
   };
 
@@ -1214,7 +1161,7 @@ function ChatContent() {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages, streaming, thinkingMessages, toolMessages]);
+  }, [messages, streaming]);
 
   const adjustTextareaHeight = () => {
     const el = textareaRef.current;
@@ -1601,43 +1548,77 @@ function ChatContent() {
                 </div>
               );
             })}
-            {/* 持久化的 thinking 消息 */}
-            {thinkingMessages.map((m) => (
-              <div
-                key={`thinking-${m.id}`}
-                className="max-w-[80%] rounded-2xl border border-blue-100 bg-blue-50 px-5 py-3.5 text-[13px] text-blue-800 mb-4 shadow-sm"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1">
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:0ms]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:150ms]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:300ms]" />
-                  </div>
-                  <span>{m.description}</span>
-                </div>
-              </div>
-            ))}
-            {/* 持久化的 tool 消息 */}
-            {toolMessages.length > 0 && (
-              <div className="max-w-[80%] rounded-2xl border border-purple-100 bg-purple-50 px-5 py-3.5 text-[13px] text-purple-800 mb-4 shadow-sm">
-                <div className="mb-2 font-medium">工具调用</div>
-                <div className="flex flex-wrap gap-2">
-                  {toolMessages.map((t) => (
-                    <span
-                      key={`tool-${t.toolCallId}`}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1 shadow-sm ring-1 ring-purple-100"
+            {/* 从数据库持久化的 thinking / tool_call / tool_result 消息 */}
+            {messages
+              .filter((m) => m.content_type === "thinking" || m.content_type === "tool_call" || m.content_type === "tool_result")
+              .map((m) => {
+                if (m.content_type === "thinking") {
+                  const step = (() => {
+                    try {
+                      const cd = m.card_data as Record<string, unknown> | null;
+                      return cd?.step as number | undefined;
+                    } catch { return undefined; }
+                  })();
+                  return (
+                    <div
+                      key={m.id}
+                      className="max-w-[80%] rounded-2xl border border-blue-100 bg-blue-50 px-5 py-3.5 text-[13px] text-blue-800 mb-4 shadow-sm"
                     >
-                      {t.name}
-                      {t.status === "running" && (
-                        <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500 align-middle" />
-                      )}
-                      {t.status === "ok" && <span className="text-emerald-600">✓</span>}
-                      {t.status === "error" && <span className="text-red-600">✗</span>}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:0ms]" />
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:150ms]" />
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-blue-400 [animation-delay:300ms]" />
+                        </div>
+                        <span>{m.content}</span>
+                      </div>
+                    </div>
+                  );
+                }
+                if (m.content_type === "tool_call") {
+                  let toolCallId = "";
+                  let name = "";
+                  let status = "running";
+                  try {
+                    const cd = m.card_data as Record<string, unknown> | null;
+                    toolCallId = String(cd?.toolCallId || "");
+                    name = String(cd?.name || m.content || "");
+                    status = String(cd?.status || "running");
+                  } catch { /* */ }
+                  return (
+                    <div key={m.id} className="max-w-[80%] rounded-2xl border border-purple-100 bg-purple-50 px-5 py-3.5 text-[13px] text-purple-800 mb-3 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-purple-600 font-medium">{name}</span>
+                        {status === "running" && (
+                          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-purple-500" />
+                        )}
+                        {status === "ok" && <span className="text-emerald-600">✓</span>}
+                        {status === "error" && <span className="text-red-600">✗</span>}
+                      </div>
+                    </div>
+                  );
+                }
+                if (m.content_type === "tool_result") {
+                  let name = "";
+                  let ok = true;
+                  try {
+                    const cd = m.card_data as Record<string, unknown> | null;
+                    name = String(cd?.name || "");
+                    ok = cd?.ok !== false;
+                  } catch { /* */ }
+                  return (
+                    <div key={m.id} className="max-w-[80%] rounded-2xl border border-purple-100 bg-purple-50 px-5 py-3.5 text-[13px] text-purple-800 mb-3 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-purple-600 font-medium">{name}</span>
+                        {ok ? <span className="text-emerald-600">✓</span> : <span className="text-red-600">✗</span>}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })}
+            {/* 当前正在流式输出的文本 */}
+            {(streaming || loading) && messages.length === 0 ? null : null}
             {streaming ? (
               <div className="flex justify-start mb-6">
                 <div className="relative w-full max-w-[80%] overflow-visible rounded-2xl border border-gray-100 bg-white px-6 py-4 pr-12 text-[14px] leading-6 text-[#1d2129] shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
