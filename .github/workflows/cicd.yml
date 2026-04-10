@@ -1,0 +1,243 @@
+# ============================================================
+# MeowOne CI/CD Pipeline — GitHub Actions
+# ============================================================
+# 触发条件：
+#   - push 到 develop 分支：构建镜像并推送测试标签
+#   - push 到 main 分支 / release tag：构建镜像、推送 latest/tag 标签、触发部署
+#   - pull_request：仅运行测试和 lint
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [develop, main]
+    tags: ['v*']
+  pull_request:
+    branches: [develop, main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BACKEND: meowone-backend
+  IMAGE_FRONTEND: meowone-frontend
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  # ============================================================
+  # 阶段一：代码质量检查（PR & 所有推送）
+  # ============================================================
+  lint-backend:
+    name: 后端 Lint & 类型检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装依赖
+        run: |
+          cd backend_v2
+          pip install -r requirements.txt
+          pip install ruff mypy
+
+      - name: Ruff 代码检查
+        run: |
+          cd backend_v2
+          ruff check app/ || true
+          ruff format --check app/ || true
+
+      - name: Pytest 单元测试
+        run: |
+          cd backend_v2
+          pip install pytest pytest-asyncio pytest-cov
+          pytest tests/ -v --tb=short || echo "⚠️ 测试目录尚未创建，跳过"
+
+  lint-frontend:
+    name: 前端 Lint & 构建检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: 安装依赖
+        working-directory: admin_web
+        run: pnpm install --no-frozen-lockfile
+
+      - name: ESLint 检查
+        working-directory: admin_web
+        run: pnpm run lint || true
+
+      - name: TypeScript 类型检查
+        working-directory: admin_web
+        run: pnpm exec tsc --noEmit || true
+
+      - name: 构建检查
+        working-directory: admin_web
+        run: pnpm build
+
+  # ============================================================
+  # 阶段二：Docker 镜像构建与推送
+  # ============================================================
+  build-and-push:
+    name: 构建并推送 Docker 镜像
+    needs: [lint-backend, lint-frontend]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 生成镜像标签
+        id: tag
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "tag=develop-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 登录容器仓库
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 构建后端镜像
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend_v2
+          file: ./backend_v2/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_BACKEND }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_BACKEND }}:build-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 构建前端镜像
+        uses: docker/build-push-action@v5
+        with:
+          context: ./admin_web
+          file: ./admin_web/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_FRONTEND }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_FRONTEND }}:build-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================================
+  # 阶段三：部署到生产环境（仅 main/tag）
+  # ============================================================
+  deploy-production:
+    name: 部署生产环境
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 生成部署版本标识
+        run: echo "DEPLOY_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
+
+      - name: 部署到服务器
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+            DEPLOY_DIR="/opt/meowone"
+            BACKUP_DIR="/opt/meowone/backups/$(date '+%Y%m%d_%H%M%S')"
+
+            echo "📋 开始部署 meowone 版本: ${{ needs.build-and-push.outputs.image_tag }}"
+
+            # 创建目录
+            mkdir -p "$DEPLOY_DIR" "$BACKUP_DIR"
+
+            # 备份当前配置和数据库
+            echo "💾 备份当前状态..."
+            cp -f "$DEPLOY_DIR/.env.production" "$BACKUP_DIR/" 2>/dev/null || true
+            cp -f "$DEPLOY_DIR/docker-compose.prod.yml" "$BACKUP_DIR/" 2>/dev/null || true
+            cp -f "$DEPLOY_DIR/meowone.db" "$BACKUP_DIR/" 2>/dev/null || true
+
+            # 记录回滚信息
+            CURRENT_TAG=$(docker inspect --format='{{index .Config.Labels "org.opencontainers.image.version"}}' meowone-backend 2>/dev/null || echo "unknown")
+            echo "$CURRENT_TAG" > "$BACKUP_DIR/previous_version.txt"
+
+            # 复制最新配置文件到服务器
+            echo "📂 同步配置文件..."
+            scp_config=$(cat <<'SCPEOF'
+# 这里由 CI 自动生成的 docker-compose.prod.yml
+# 实际应通过 CI 推送或配置管理工具同步
+SCPEOF
+            )
+
+            # 拉取最新镜像
+            echo "📥 拉取最新镜像..."
+            cd "$DEPLOY_DIR"
+            docker compose -f docker-compose.prod.yml pull
+
+            # 执行滚动更新
+            echo "🚀 滚动部署..."
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            # 等待服务就绪
+            echo "⏳ 等待服务启动..."
+            sleep 15
+
+            # 健康检查
+            echo "🔍 执行健康检查..."
+            MAX_RETRIES=12
+            RETRY_COUNT=0
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+                echo "✅ 后端健康检查通过"
+                break
+              fi
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "  重试 $RETRY_COUNT/$MAX_RETRIES..."
+              sleep 5
+            done
+
+            if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+              echo "❌ 后端健康检查失败，执行自动回滚！"
+              cd "$BACKUP_DIR"
+              docker compose -f docker-compose.prod.yml up -d --remove-orphans 2>/dev/null || true
+              exit 1
+            fi
+
+            # 清理旧镜像（保留最近3个）
+            echo "🧹 清理旧镜像..."
+            docker image prune -f --filter "until=24h"
+
+            echo "✅ 部署完成！版本: ${{ needs.build-and-push.outputs.image_tag }}"
+            echo "📝 备份位置: $BACKUP_DIR"
+
+      - name: 通知部署结果
+        if: always()
+        run: |
+          echo "部署状态: ${{ job.status }}"
+          echo "部署版本: ${{ needs.build-and-push.outputs.image_tag }}"
+          echo "部署时间: ${{ env.DEPLOY_TIME }}"

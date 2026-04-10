@@ -237,7 +237,7 @@ def _resources_from_mcp_result(result: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 async def list_mcp_tools(name: str) -> List[Dict[str, Any]]:
     """获取 MCP 服务器的工具列表"""
-    from app.mcp.mcp_config import get_server_by_name
+    from app.mcp.mcp.mcp_config import get_server_by_name
     
     server = get_server_by_name(name)
     if not server:
@@ -247,7 +247,7 @@ async def list_mcp_tools(name: str) -> List[Dict[str, Any]]:
     
     try:
         if server.transport == "stdio" and server.command:
-            from app.mcp.stdio_session import list_tools_for_command
+            from app.mcp.mcp.stdio_session import list_tools_for_command
             from pathlib import Path
             from app.paths import repo_root
             
@@ -264,7 +264,7 @@ async def list_mcp_tools(name: str) -> List[Dict[str, Any]]:
                     "inputSchema": t.get("inputSchema"),
                 })
         elif server.transport == "sse" and server.url:
-            from app.mcp.sse_client import list_mcp_tools_sse
+            from app.mcp.mcp.sse_client import list_mcp_tools_sse
             result = await list_mcp_tools_sse(
                 url=server.url,
                 auth_type=server.auth_type,
@@ -278,7 +278,7 @@ async def list_mcp_tools(name: str) -> List[Dict[str, Any]]:
                     "inputSchema": t.get("inputSchema"),
                 })
         elif server.transport == "streamable-http" and server.url:
-            from app.mcp.streamable_client import list_mcp_tools_streamable
+            from app.mcp.mcp.streamable_client import list_mcp_tools_streamable
             result = await list_mcp_tools_streamable(
                 url=server.url,
                 auth_type=server.auth_type,
@@ -299,7 +299,7 @@ async def list_mcp_tools(name: str) -> List[Dict[str, Any]]:
 
 async def list_mcp_resources(name: str) -> tuple[List[Dict[str, Any]], Optional[str]]:
     """获取 MCP 服务器的资源列表；不支持或失败时返回空列表与可选错误信息。"""
-    from app.mcp.mcp_config import get_server_by_name
+    from app.mcp.mcp.mcp_config import get_server_by_name
 
     server = get_server_by_name(name)
     if not server:
@@ -308,7 +308,7 @@ async def list_mcp_resources(name: str) -> tuple[List[Dict[str, Any]], Optional[
     out: List[Dict[str, Any]] = []
     try:
         if server.transport == "stdio" and server.command:
-            from app.mcp.stdio_session import list_resources_for_command
+            from app.mcp.mcp.stdio_session import list_resources_for_command
             from pathlib import Path
             from app.paths import repo_root
 
@@ -325,7 +325,7 @@ async def list_mcp_resources(name: str) -> tuple[List[Dict[str, Any]], Optional[
                     "mimeType": r.get("mimeType"),
                 })
         elif server.transport == "sse" and server.url:
-            from app.mcp.sse_client import list_mcp_resources_sse
+            from app.mcp.mcp.sse_client import list_mcp_resources_sse
 
             result = await list_mcp_resources_sse(
                 url=server.url,
@@ -340,7 +340,7 @@ async def list_mcp_resources(name: str) -> tuple[List[Dict[str, Any]], Optional[
                     "mimeType": r.get("mimeType"),
                 })
         elif server.transport == "streamable-http" and server.url:
-            from app.mcp.streamable_client import list_mcp_resources_streamable
+            from app.mcp.mcp.streamable_client import list_mcp_resources_streamable
 
             result = await list_mcp_resources_streamable(
                 url=server.url,

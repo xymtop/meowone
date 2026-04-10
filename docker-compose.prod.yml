@@ -1,0 +1,109 @@
+# ============================================================
+# MeowOne 生产环境 Docker Compose
+# ============================================================
+# 用法：
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# 与开发环境区别：
+#   - 使用预构建镜像而非本地构建
+#   - 添加资源限制
+#   - 配置日志轮转
+#   - 挂载生产配置文件
+#   - 暴露 HTTPS 端口（前置 Nginx 反向代理）
+# ============================================================
+
+services:
+  backend:
+    image: ${REGISTRY:-ghcr.io}/${REPO:-meowone}/meowone-backend:${IMAGE_TAG:-latest}
+    container_name: meowone-backend
+    env_file:
+      - .env.production
+    environment:
+      - DATABASE_PATH=/app/data/meowone.db
+    volumes:
+      - ./data/meowone.db:/app/data/meowone.db
+      - ./.meowone:/app/.meowone:ro
+    networks:
+      - meowone-net
+    restart: always
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      - "monitoring=true"
+      - "service=backend"
+
+  frontend:
+    image: ${REGISTRY:-ghcr.io}/${REPO:-meowone}/meowone-frontend:${IMAGE_TAG:-latest}
+    container_name: meowone-frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - meowone-net
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "3"
+    labels:
+      - "monitoring=true"
+      - "service=frontend"
+
+  # Nginx 反向代理（可选，用于 HTTPS 和负载均衡）
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: meowone-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      frontend:
+        condition: service_started
+    networks:
+      - meowone-net
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    profiles:
+      - with-nginx
+
+networks:
+  meowone-net:
+    driver: bridge
+    name: meowone-production

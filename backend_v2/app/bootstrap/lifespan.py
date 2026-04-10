@@ -101,6 +101,7 @@ _CORRECT_SCHEMA = {
         env_json TEXT DEFAULT '{}',
         config_json TEXT DEFAULT '{}',
         enabled INTEGER DEFAULT 1,
+        source TEXT DEFAULT 'db',
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
     """,
@@ -400,6 +401,15 @@ async def _init_db() -> None:
                             "表 %s 有 %d 行用户数据，列与期望不一致（缺少=%s，多余=%s），跳过重建以保护数据",
                             table, count, missing or "无", extra or "无",
                         )
+                        # 尝试增量 ALTER TABLE 补齐缺失列（向后兼容，不丢失数据）
+                        for col in missing:
+                            try:
+                                # 推断列类型：TEXT 为通用安全类型
+                                col_type = "TEXT"
+                                await db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+                                logger.info("ALTER TABLE: 为 %s 补加列 %s", table, col)
+                            except Exception as alt_err:
+                                logger.warning("ALTER TABLE %s.%s 失败（非致命）: %s", table, col, alt_err)
                     else:
                         logger.info(
                             "迁移表 %s: 缺少列=%s, 多余列=%s",
