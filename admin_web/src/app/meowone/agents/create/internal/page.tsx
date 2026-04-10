@@ -620,6 +620,7 @@ export default function CreateInternalAgentPage() {
               {[
                 { value: "react", name: "ReAct（默认）", desc: "思考 → 行动 → 观察，适合大多数任务", badge: "推荐" },
                 { value: "plan_exec", name: "计划-执行分离", desc: "先规划再执行，适合需要步骤化处理的任务", badge: "" },
+                { value: "direct", name: "直连模式", desc: "纯生成模式，不使用工具，保留对话历史", badge: "" },
                 { value: "critic", name: "批评-改进", desc: "生成 → 批评 → 改进，适合需要高质量输出的任务", badge: "" },
                 { value: "hierarchical", name: "层级式执行", desc: "上级规划，下级执行，适合复杂多层次任务", badge: "" },
               ].map((mode) => {
@@ -1022,7 +1023,7 @@ export default function CreateInternalAgentPage() {
                       <span className="text-sm text-gray-700">思考方式</span>
                     </div>
                     <span className="text-sm font-medium text-green-600">
-                      {formData.loopMode === "react" ? "ReAct（默认）" : formData.loopMode === "plan_exec" ? "计划-执行分离" : formData.loopMode === "critic" ? "批评-改进" : "层级式执行"}
+                      {formData.loopMode === "react" ? "ReAct（默认）" : formData.loopMode === "plan_exec" ? "计划-执行分离" : formData.loopMode === "direct" ? "直连模式" : formData.loopMode === "critic" ? "批评-改进" : "层级式执行"}
                     </span>
                   </div>
                 </div>

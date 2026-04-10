@@ -429,6 +429,7 @@ async def _seed_builtin_data() -> None:
         builtin_loops = [
             ("react", "app.loop.algorithms.react", "ReAct 思考-行动-观察循环，支持并行工具调用"),
             ("plan_exec", "app.loop.algorithms.plan_exec", "计划-执行模式，先规划后逐步执行"),
+            ("direct", "app.loop.algorithms.direct", "直连模式，最基础的纯生成算法，不使用工具和历史"),
         ]
         for name, module, desc in builtin_loops:
             cur = await db.execute("SELECT COUNT(*) FROM loops WHERE name = ?", (name,))

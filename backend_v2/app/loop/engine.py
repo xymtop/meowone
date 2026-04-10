@@ -45,3 +45,4 @@ def import_all_algorithms() -> None:
     """导入所有算法模块以触发 @loop_algorithm 注册"""
     import app.loop.algorithms.react  # noqa: F401
     import app.loop.algorithms.plan_exec  # noqa: F401
+    import app.loop.algorithms.direct  # noqa: F401
