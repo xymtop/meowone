@@ -125,40 +125,6 @@ class ConversationTurnService:
                 yield payload
             else:
                 logger.warning("stream_turn 跳过 event: type=%s (payload=None)", type(event).__name__)
-            
-            # 对于 thinking / tool_call / tool_result 事件，立即写入数据库（持久化展示）
-            if isinstance(event, ThinkingEvent):
-                await message_service.create_message(
-                    session_id=session_id,
-                    role="system",
-                    content_type="thinking",
-                    content=event.description,
-                    card_data=json.dumps({"step": event.step}),
-                )
-            elif isinstance(event, ToolCallEvent):
-                await message_service.create_message(
-                    session_id=session_id,
-                    role="system",
-                    content_type="tool_call",
-                    content=f"正在调用工具: {event.capability_name}",
-                    card_data=json.dumps({
-                        "toolCallId": event.tool_call_id,
-                        "name": event.capability_name,
-                        "status": "running",
-                    }),
-                )
-            elif isinstance(event, ToolResultEvent):
-                await message_service.create_message(
-                    session_id=session_id,
-                    role="system",
-                    content_type="tool_result",
-                    content=f"{event.capability_name} {'✓' if event.success else '✗'}",
-                    card_data=json.dumps({
-                        "toolCallId": event.tool_call_id,
-                        "name": event.capability_name,
-                        "ok": event.success,
-                    }),
-                )
 
             # DoneEvent 时保存 assistant 消息到数据库
             if isinstance(event, DoneEvent):

@@ -18,7 +18,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 
 from app.dispatch.context import DispatchContext
 from app.dispatch.registry import get_strategy
-from app.loop.events import LoopEvent, ErrorEvent, DoneEvent
+from app.loop.events import LoopEvent, ErrorEvent, DoneEvent, ThinkingEvent
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,8 @@ async def dispatch(
     """
     mid = message_id or str(uuid.uuid4())
 
+    yield ThinkingEvent(step=1, description="正在构建调度上下文...")
+
     ctx = await _build_context(
         user_message=user_message,
         history=history,
@@ -55,6 +57,8 @@ async def dispatch(
         agent_name=agent_name,
     )
 
+    # ─── 步骤 2: 查找调度策略 ───
+
     fn = get_strategy(ctx.strategy_name)
     if fn is None:
         logger.warning("找不到调度策略: %s，fallback 到 direct", ctx.strategy_name)
@@ -65,10 +69,12 @@ async def dispatch(
         yield DoneEvent(message_id=mid, loop_rounds=0, total_duration=0)
         return
 
+    # ─── 步骤 3: 开始调度 ───
     logger.info(
         "dispatch: strategy=%s agent_id=%s instance_id=%s image_id=%s",
         ctx.strategy_name, ctx.agent_id, ctx.instance_id, ctx.image_id,
     )
+
     async for event in fn(ctx):
         yield event
 
